@@ -11,7 +11,7 @@ CommandCompleteCrash - Crashes people (Not sure if it works in modern version i 
 InventoryStealCommand - Steals any players inventory by using command blocks.
 LoopCommand - Loops the command that you want to loop by creating a command block with that command in it - Also has a deloop command that if you do deloop with the original command you looped it will delete that command block
 
-
+-------------
 
 DISCORD: @every_ne
 ----BLON---
