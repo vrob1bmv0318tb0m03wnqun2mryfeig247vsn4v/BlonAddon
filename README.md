@@ -5,7 +5,7 @@ Modules:
 - ImageEggs - Creates an image ingame using textdisplays (PLACE IMAGES IN THE IMAGE FOLDER IN YOUR MINECRAFT DIRECTORY IF IT ISNT THERE CREATE IT)
 - LegitKillAura - Legit killaura (WIP STILL GETS DETECTED)
 - TotemBypass - Bypasses Totems With Mace
-- ParticalAuraModule - Uses core to give you fancy auras
+- ParticleAuraModule - Uses core to give you fancy auras
 
 Commands
 - InventoryStealCommand - Steals any players inventory by using command blocks.
