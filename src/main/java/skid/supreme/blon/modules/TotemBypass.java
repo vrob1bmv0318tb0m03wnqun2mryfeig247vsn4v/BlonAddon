@@ -3,7 +3,11 @@ package skid.supreme.blon.modules;
 import meteordevelopment.meteorclient.events.packets.PacketEvent;
 import meteordevelopment.meteorclient.mixininterface.IPlayerInteractEntityC2SPacket;
 import meteordevelopment.meteorclient.mixininterface.IPlayerMoveC2SPacket;
-import meteordevelopment.meteorclient.settings.*;
+import meteordevelopment.meteorclient.settings.BoolSetting;
+import meteordevelopment.meteorclient.settings.EnumSetting;
+import meteordevelopment.meteorclient.settings.IntSetting;
+import meteordevelopment.meteorclient.settings.Setting;
+import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.InvUtils;
 import meteordevelopment.orbit.EventHandler;
@@ -177,13 +181,7 @@ public class TotemBypass extends Module {
             case Vanilla -> performVanillaAttack(entity, height);
         }
 
-        if (delayTicks.get() > 0) {
-            try {
-                Thread.sleep(delayTicks.get() * 50L);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
+        // Removed Thread.sleep to prevent freezing the main game thread
     }
 
     private void performPaperAttack(LivingEntity entity, int height) {
@@ -247,7 +245,7 @@ public class TotemBypass extends Module {
     }
 
     private boolean isAir(BlockPos pos) {
-        return mc.world.getBlockState(pos).isAir();
+        return mc.world != null && mc.world.getBlockState(pos).isAir();
     }
 
     private enum WeaponType {

@@ -7,9 +7,10 @@ import meteordevelopment.meteorclient.addons.MeteorAddon;
 import meteordevelopment.meteorclient.commands.Commands;
 import meteordevelopment.meteorclient.systems.modules.Category;
 import meteordevelopment.meteorclient.systems.modules.Modules;
+import skid.supreme.blon.modules.ParticleAuraModule;
 import net.minecraft.item.Items;
-import skid.supreme.blon.commands.CommandCompleteCrash;
 import skid.supreme.blon.commands.InventoryStealCommand;
+import skid.supreme.blon.commands.CoreCommand;
 import skid.supreme.blon.commands.LoopCommand;
 import skid.supreme.blon.modules.ChatBubble;
 import skid.supreme.blon.modules.ImageEggs;
@@ -31,11 +32,13 @@ public class Blon extends MeteorAddon {
                 Modules.get().add(new ImageEggs());
                 Modules.get().add(new ChatBubble());
                 Modules.get().add(new LegitKillAura());
+                Modules.get().add(new ParticleAuraModule());
 
                 // Register commands
                 Commands.add(new InventoryStealCommand());
                 Commands.add(new LoopCommand());
-                Commands.add(new CommandCompleteCrash());
+                Commands.add(new CoreCommand());
+                
         }
 
         @Override

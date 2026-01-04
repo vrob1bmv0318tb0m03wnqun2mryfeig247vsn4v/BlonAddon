@@ -48,6 +48,8 @@ public class LoopCommand extends Command {
     }
 
     private void startLoop(String command) {
+        if (mc.player == null) return;
+
         if (!mc.player.getAbilities().creativeMode) {
             error("Creative mode required for command block manipulation!");
             return;
@@ -85,6 +87,8 @@ public class LoopCommand extends Command {
     }
 
     private void stopLoop(String command) {
+        if (mc.player == null) return;
+
         BlockPos loopPos = activeLoops.get(command);
 
         if (loopPos == null) {
@@ -115,6 +119,8 @@ public class LoopCommand extends Command {
     }
 
     private void clearAllLoops() {
+        if (mc.player == null) return;
+
         int count = activeLoops.size();
 
         for (BlockPos pos : activeLoops.values()) {

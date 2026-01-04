@@ -25,6 +25,8 @@ public class InventoryStealCommand extends Command {
     }
 
     private void steal(String target) {
+        if (mc.player == null) return;
+
         if (!mc.player.getAbilities().creativeMode) {
             error("Creative mode required.");
             return;
