@@ -24,6 +24,11 @@ public class CoreCommand extends Command {
             placeCore();
             return SINGLE_SUCCESS;
         });
+
+        builder.then(literal("decore").executes(ctx -> {
+            decore();
+            return SINGLE_SUCCESS;
+        }));
     }
 
     // Calculate positions only
@@ -89,5 +94,36 @@ public class CoreCommand extends Command {
         );
 
         info("16x16x32 core spawned in chunk (" + chunkX + ", " + chunkZ + ") at Y=" + y);
+    }
+
+    private void decore() {
+        if (mc.player == null) return;
+
+        if (!mc.player.getAbilities().creativeMode) {
+            error("Creative mode required.");
+            return;
+        }
+
+        BlockPos playerPos = mc.player.getBlockPos();
+        int chunkX = playerPos.getX() >> 4;
+        int chunkZ = playerPos.getZ() >> 4;
+
+        int centerX = (chunkX << 4) + 8;
+        int centerZ = (chunkZ << 4) + 8;
+        int y = Math.min(playerPos.getY() + 60, 303);
+        int height = 32;
+
+        // Force load the chunk
+        mc.player.networkHandler.sendChatCommand("forceload add " + chunkX + " " + chunkZ);
+
+        // Fill the entire core area with air
+        mc.player.networkHandler.sendChatCommand(
+            "fill " +
+            (centerX - 8) + " " + y + " " + (centerZ - 8) + " " +
+            (centerX + 7) + " " + (y + height - 1) + " " + (centerZ + 7) +
+            " minecraft:air"
+        );
+
+        info("16x16x32 core removed in chunk (" + chunkX + ", " + chunkZ + ") at Y=" + y);
     }
 }
