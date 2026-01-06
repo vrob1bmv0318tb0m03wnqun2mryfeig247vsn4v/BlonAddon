@@ -1,565 +1,430 @@
 package skid.supreme.blon.modules;
 
-import meteordevelopment.meteorclient.systems.modules.Module;
-import meteordevelopment.meteorclient.systems.modules.Category;
-import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.events.world.TickEvent;
+import meteordevelopment.meteorclient.settings.*;
+import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
 import skid.supreme.blon.Blon;
 import skid.supreme.blon.commands.CoreCommand;
-import java.util.List;
+import skid.supreme.blon.core.CoreUpdater;
+
 import java.util.ArrayList;
+import java.util.List;
 
 public class ParticleAuraModule extends Module {
+
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
 
     private final Setting<ParticleStyle> style = sgGeneral.add(new EnumSetting.Builder<ParticleStyle>()
         .name("particle-style")
         .description("The style of the particle aura.")
-        .defaultValue(ParticleStyle.NORMAL)
+        .defaultValue(ParticleStyle.CUBE)
         .build()
     );
 
     private final Setting<String> particleType = sgGeneral.add(new StringSetting.Builder()
         .name("particle-type")
-        .description("The type of particle to use (e.g., flame, dust, etc.).")
-        .defaultValue("flame")
+        .description("The type of particle to use (e.g., flame, dust, etc.)")
+        .defaultValue("enchanted_hit")
         .build()
     );
 
-    public enum ParticleStyle {
-        NORMAL,
-        SPHERE,
-        HALO,
-        ORBIT,
-        RINGS,
-        WINGS,
-        CUBE,
-        ARROWS,
-        BEAM,
-        PULSE,
-        SPIN,
-        SPIRAL,
-        VORTEX,
-        WHIRL,
-        WHIRLWIND,
-        TWINS,
-        QUADHELIX,
-        ICOSPHERE,
-        CELEBRATION,
-        CHAINS,
-        COMPANION,
-        POINT,
-        POPPER,
-        THICK,
-        OUTLINE,
-        OVERHEAD,
-        FEET,
-        TRAIL,
-        SWORDS,
-        TELEPORT,
-        DEATH,
-        HURT,
-        MOVE,
-        FISHING,
-        BLOCKBREAK,
-        BLOCKPLACE,
-        BATMAN,
-        INVOCATION
-    }
+    private final Setting<Integer> maxPacketsPerTick = sgGeneral.add(new IntSetting.Builder()
+        .name("max-packets-per-tick")
+        .description("Maximum number of C2S packets sent per tick")
+        .defaultValue(10)
+        .min(1)
+        .max(50000)
+        .sliderMin(1)
+        .sliderMax(5000)
+        .build()
+    );
 
-    private int index = 0;
+    private final Setting<Double> rotationSpeedX = sgGeneral.add(new DoubleSetting.Builder()
+        .name("rotation-speed-x")
+        .description("Speed of rotation around X axis (radians per second)")
+        .defaultValue(0.0)
+        .min(0.0)
+        .max(10.0)
+        .sliderMin(0.0)
+        .sliderMax(5.0)
+        .build()
+    );
+
+    private final Setting<Double> rotationSpeedY = sgGeneral.add(new DoubleSetting.Builder()
+        .name("rotation-speed-y")
+        .description("Speed of rotation around Y axis (radians per second)")
+        .defaultValue(0.5)
+        .min(0.0)
+        .max(10.0)
+        .sliderMin(0.0)
+        .sliderMax(5.0)
+        .build()
+    );
+
+    private final Setting<Double> rotationSpeedZ = sgGeneral.add(new DoubleSetting.Builder()
+        .name("rotation-speed-z")
+        .description("Speed of rotation around Z axis (radians per second)")
+        .defaultValue(0.0)
+        .min(0.0)
+        .max(10.0)
+        .sliderMin(0.0)
+        .sliderMax(5.0)
+        .build()
+    );
+
+    private final Setting<Double> quality = sgGeneral.add(new DoubleSetting.Builder()
+        .name("quality")
+        .description("Quality multiplier for particle density (0.1-2.0)")
+        .defaultValue(1.0)
+        .min(0.1)
+        .max(2.0)
+        .sliderMin(0.1)
+        .sliderMax(2.0)
+        .build()
+    );
+
+    private Vec3d lastPlayerPos = null;
+    private ParticleStyle lastStyle;
 
     public ParticleAuraModule() {
-        super(Blon.Main, "Particle Aura", "Dynamic particle aura using the core.");
+        super(Blon.Main, "Particle Aura", "Advanced geometric particle aura using the core.");
+        lastStyle = style.get();
+    }
+
+    public enum ParticleStyle {
+        CUBE,
+        SPHERE,
+        SPIRAL,
+        TORUS,
+        PYRAMID,
+        DOUBLE_HELIX,
+        ICOSAHEDRON,
+        STAR,
+        HELIX_RING,
+        DIAMOND
+    }
+
+    public enum RotationAxis {
+        X, Y, Z
+    }
+
+    @Override
+    public void onDeactivate() {
+        clear();
     }
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || CoreCommand.corePositions == null || CoreCommand.corePositions.isEmpty()) return;
+        if (mc.player == null || CoreCommand.corePositions.isEmpty()) return;
 
-        Vec3d center = new Vec3d(mc.player.getX(), mc.player.getY() + 1.5, mc.player.getZ());
+        // Clear if style changed
+        if (lastStyle != style.get()) {
+            clear();
+            lastStyle = style.get();
+        }
 
-        List<Vec3d> positions = getParticlePositions(center, style.get());
+        Vec3d currentPos = new Vec3d(mc.player.getX(), mc.player.getY() + 1.5, mc.player.getZ());
+        Vec3d velocity = lastPlayerPos == null ? Vec3d.ZERO : currentPos.subtract(lastPlayerPos);
+        lastPlayerPos = currentPos;
 
-        for (int i = 0; i < positions.size(); i++) {
-            Vec3d particlePos = positions.get(i);
+        // 1. Compute particle positions for this tick
+        List<Vec3d> particlePositions = getParticlePositions(currentPos, style.get(), velocity);
 
-            // Pick a command block from the core
-            BlockPos blockPos = CoreCommand.corePositions.get(index % CoreCommand.corePositions.size());
+        // 2. Map particle positions to core blocks
+        List<BlockPos> core = CoreCommand.corePositions;
+        int needed = Math.min(particlePositions.size(), core.size());
 
-            // Build the command
-            String cmd = String.format(
+        // 3. Build commands for each core block and collect positions
+        List<BlockPos> coresToUse = new ArrayList<>();
+        List<String> commands = new ArrayList<>();
+        for (int i = 0; i < needed; i++) {
+            Vec3d pos = particlePositions.get(i);
+            coresToUse.add(core.get(i));
+            commands.add(String.format(
                 "particle minecraft:%s %.3f %.3f %.3f 0 0 0 0.001 1",
                 particleType.get(),
-                particlePos.x,
-                particlePos.y,
-                particlePos.z
-            );
-
-            // Only the blocks currently being used become REPEATING; others stay REDSTONE
-            sendBlock(blockPos, cmd, true);
-
-            index = (index + 1) % CoreCommand.corePositions.size();
+                pos.x, pos.y, pos.z
+            ));
         }
 
-        // Optional: reset unused blocks to REDSTONE (if you're reusing blocks)
-        for (int i = positions.size(); i < CoreCommand.corePositions.size(); i++) {
-            sendBlock(CoreCommand.corePositions.get(i), "", false);
-        }
+        // 4. Queue all commands in CoreUpdater at once
+        CoreUpdater.startAuto(coresToUse, commands, false, true, maxPacketsPerTick.get());
+
+        // 5. Tick the CoreUpdater to send packets
+        CoreUpdater.onTick();
     }
 
-    private List<Vec3d> getParticlePositions(Vec3d center, ParticleStyle style) {
+    private List<Vec3d> getParticlePositions(Vec3d center, ParticleStyle style, Vec3d velocity) {
         List<Vec3d> positions = new ArrayList<>();
+        long time = System.currentTimeMillis();
+        double t = (time % 10000) / 10000.0 * 2 * Math.PI;
+
         switch (style) {
-            case NORMAL:
-                // Simple circle
-                for (int i = 0; i < 16; i++) {
-                    double angle = 2 * Math.PI * i / 16;
-                    double x = center.x + 3 * Math.cos(angle);
-                    double y = center.y;
-                    double z = center.z + 3 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
+
+            case CUBE -> {
+                double size = 1.2;
+                Vec3d[] corners = new Vec3d[8];
+                int idx = 0;
+                for (int i = -1; i <= 1; i += 2) {
+                    for (int j = -1; j <= 1; j += 2) {
+                        for (int k = -1; k <= 1; k += 2) {
+                            double x = i * size;
+                            double y = j * size;
+                            double z = k * size;
+                            corners[idx++] = center.add(x, y, z);
+                        }
+                    }
                 }
-                break;
-            case SPHERE:
-                // Sphere distribution
-                int density = 15;
+                int[][] edges = {{0,1},{0,2},{0,4},{1,3},{1,5},{2,3},{2,6},{3,7},{4,5},{4,6},{5,7},{6,7}};
+                int edgePoints = Math.max(1, (int)(20 * quality.get()));
+                for (int[] e : edges) {
+                    Vec3d c1 = corners[e[0]], c2 = corners[e[1]];
+                    for (int p = 0; p <= edgePoints; p++) {
+                        double alpha = p / (double)edgePoints;
+                        positions.add(c1.add(c2.subtract(c1).multiply(alpha)));
+                    }
+                }
+            }
+
+            case SPHERE -> {
+                int density = Math.max(1, (int)(200 * quality.get()));
                 double radius = 1.5;
                 for (int i = 0; i < density; i++) {
                     double u = Math.random();
                     double v = Math.random();
-                    double theta = Math.PI * 2 * u;
+                    double theta = 2 * Math.PI * u;
                     double phi = Math.acos(2.0 * v - 1.0);
-                    double dx = radius * Math.sin(phi) * Math.cos(theta);
-                    double dy = radius * Math.sin(phi) * Math.sin(theta);
-                    double dz = radius * Math.cos(phi);
-                    positions.add(center.add(dx, dy, dz));
+                    double x = radius * Math.sin(phi) * Math.cos(theta);
+                    double y = radius * Math.sin(phi) * Math.sin(theta);
+                    double z = radius * Math.cos(phi);
+                    positions.add(center.add(x, y, z));
                 }
-                break;
-            case HALO:
-                // Halo above head
-                for (int i = 0; i < 20; i++) {
-                    double angle = 2 * Math.PI * i / 20;
-                    double x = center.x + 1.5 * Math.cos(angle);
-                    double y = center.y + 1.0;
-                    double z = center.z + 1.5 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
+            }
+
+            case SPIRAL -> {
+                int spiralPoints = Math.max(1, (int)(200 * quality.get()));
+                for (int i = 0; i < spiralPoints; i++) {
+                    double angle = i * 0.04 + t;
+                    double r = 1.2 + i*0.005;
+                    positions.add(center.add(Math.cos(angle)*r, i*0.008, Math.sin(angle)*r));
                 }
-                break;
-            case ORBIT:
-                // Orbiting particles
-                for (int i = 0; i < 10; i++) {
-                    double angle = 2 * Math.PI * i / 10 + (System.currentTimeMillis() % 10000) / 10000.0 * 2 * Math.PI;
-                    double x = center.x + 2 * Math.cos(angle);
-                    double y = center.y + Math.sin(angle);
-                    double z = center.z + 2 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case RINGS:
-                // Multiple rings
-                for (int ring = 1; ring <= 3; ring++) {
-                    double r = ring * 0.8;
-                    int points = 8 * ring;
-                    for (int i = 0; i < points; i++) {
-                        double angle = 2 * Math.PI * i / points;
-                        double x = center.x + r * Math.cos(angle);
-                        double y = center.y;
-                        double z = center.z + r * Math.sin(angle);
-                        positions.add(new Vec3d(x, y, z));
+            }
+
+            case TORUS -> {
+                int uSteps = Math.max(1, (int)(24 * quality.get()));
+                int vSteps = Math.max(1, (int)(12 * quality.get()));
+                double R = 2.0, r = 0.5;
+                for (int i = 0; i < uSteps; i++) {
+                    double u = 2 * Math.PI * i / uSteps + t;
+                    for (int j = 0; j < vSteps; j++) {
+                        double v = 2 * Math.PI * j / vSteps;
+                        double x = (R + r*Math.cos(v)) * Math.cos(u);
+                        double y = r * Math.sin(v);
+                        double z = (R + r*Math.cos(v)) * Math.sin(u);
+                        positions.add(center.add(x, y, z));
                     }
                 }
-                break;
-            case WINGS:
-                // Wing-like shape
-                for (int i = 0; i < 10; i++) {
-                    double x = center.x + (i - 5) * 0.3;
-                    double y = center.y + Math.abs(i - 5) * 0.1;
-                    double z = center.z;
-                    positions.add(new Vec3d(x, y, z));
-                    positions.add(new Vec3d(x, y, z + 0.5));
-                    positions.add(new Vec3d(x, y, z - 0.5));
-                }
-                break;
-            case CUBE:
-                // Cube outline
-                double size = 1.0;
-                for (int i = 0; i <= 1; i++) {
-                    for (int j = 0; j <= 1; j++) {
-                        for (int k = 0; k <= 1; k++) {
-                            if (i == 0 || i == 1 || j == 0 || j == 1 || k == 0 || k == 1) {
-                                double x = center.x + (i * 2 - 1) * size;
-                                double y = center.y + (j * 2 - 1) * size;
-                                double z = center.z + (k * 2 - 1) * size;
-                                positions.add(new Vec3d(x, y, z));
-                            }
-                        }
-                    }
-                }
-                break;
-            case SPIRAL:
-                // Spiral
-                for (int i = 0; i < 20; i++) {
-                    double angle = i * 0.3;
-                    double r = i * 0.1;
-                    double x = center.x + r * Math.cos(angle);
-                    double y = center.y + i * 0.05;
-                    double z = center.z + r * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case BEAM:
-                // Vertical beam
-                for (int i = 0; i < 10; i++) {
-                    double y = center.y + (i - 5) * 0.5;
-                    positions.add(new Vec3d(center.x, y, center.z));
-                }
-                break;
-            case PULSE:
-                // Pulsing circle
-                long time = System.currentTimeMillis() % 2000;
-                double pulseRadius = 2 + Math.sin(time / 500.0) * 0.5;
-                for (int i = 0; i < 16; i++) {
-                    double angle = 2 * Math.PI * i / 16;
-                    double x = center.x + pulseRadius * Math.cos(angle);
-                    double y = center.y;
-                    double z = center.z + pulseRadius * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case SPIN:
-                // Spinning particles
-                double spinAngle = (System.currentTimeMillis() % 3600) / 10.0;
-                for (int i = 0; i < 12; i++) {
-                    double angle = 2 * Math.PI * i / 12 + spinAngle;
-                    double x = center.x + 2 * Math.cos(angle);
-                    double y = center.y;
-                    double z = center.z + 2 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case VORTEX:
-                // Vortex
-                for (int i = 0; i < 15; i++) {
-                    double height = (i - 7) * 0.2;
-                    double r = 2 - Math.abs(height) * 0.5;
-                    double angle = i * 0.4 + (System.currentTimeMillis() % 5000) / 5000.0 * 2 * Math.PI;
-                    double x = center.x + r * Math.cos(angle);
-                    double y = center.y + height;
-                    double z = center.z + r * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case WHIRL:
-                // Whirl
-                for (int i = 0; i < 20; i++) {
-                    double angle = i * 0.2;
-                    double r = 2;
-                    double x = center.x + r * Math.cos(angle);
-                    double y = center.y + i * 0.1 - 1;
-                    double z = center.z + r * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case TWINS:
-                // Two orbiting particles
-                for (int twin = 0; twin < 2; twin++) {
-                    double offset = twin * Math.PI;
-                    for (int i = 0; i < 8; i++) {
-                        double angle = 2 * Math.PI * i / 8 + offset + (System.currentTimeMillis() % 3000) / 3000.0 * 2 * Math.PI;
-                        double x = center.x + 1.5 * Math.cos(angle);
-                        double y = center.y;
-                        double z = center.z + 1.5 * Math.sin(angle);
-                        positions.add(new Vec3d(x, y, z));
-                    }
-                }
-                break;
-            case ICOSPHERE:
-                // Icosphere approximation with points
-                double phi = (1 + Math.sqrt(5)) / 2;
-                double[][] icoPoints = {
-                    {0, 1, phi}, {0, -1, phi}, {0, 1, -phi}, {0, -1, -phi},
-                    {1, phi, 0}, {-1, phi, 0}, {1, -phi, 0}, {-1, -phi, 0},
-                    {phi, 0, 1}, {-phi, 0, 1}, {phi, 0, -1}, {-phi, 0, -1}
+            }
+
+            case PYRAMID -> {
+                double h = 1.5, s = 1.2;
+                Vec3d apex = center.add(0, h, 0);
+                Vec3d[] base = {
+                    center.add(-s, 0, -s),
+                    center.add(s, 0, -s),
+                    center.add(s, 0, s),
+                    center.add(-s, 0, s)
                 };
-                for (double[] point : icoPoints) {
-                    double scale = 0.5;
-                    double x = center.x + point[0] * scale;
-                    double y = center.y + point[1] * scale;
-                    double z = center.z + point[2] * scale;
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case CELEBRATION:
-                // Celebration bursts
-                for (int i = 0; i < 10; i++) {
-                    double angle = Math.random() * 2 * Math.PI;
-                    double dist = Math.random() * 2;
-                    double x = center.x + dist * Math.cos(angle);
-                    double y = center.y + Math.random() * 2;
-                    double z = center.z + dist * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case ARROWS:
-                // Arrow patterns pointing outwards
-                for (int i = 0; i < 8; i++) {
-                    double angle = 2 * Math.PI * i / 8;
-                    double x = center.x + 2 * Math.cos(angle);
-                    double y = center.y;
-                    double z = center.z + 2 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                    positions.add(new Vec3d(center.x + 1.5 * Math.cos(angle), center.y + 0.5, center.z + 1.5 * Math.sin(angle)));
-                }
-                break;
-            case WHIRLWIND:
-                // Whirlwind effect
-                for (int i = 0; i < 25; i++) {
-                    double angle = i * 0.25;
-                    double r = 2.5 - i * 0.05;
-                    double x = center.x + r * Math.cos(angle);
-                    double y = center.y + i * 0.1 - 1.25;
-                    double z = center.z + r * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case QUADHELIX:
-                // Four helical strands
-                for (int helix = 0; helix < 4; helix++) {
-                    double offset = helix * Math.PI / 2;
-                    for (int i = 0; i < 8; i++) {
-                        double angle = i * 0.4 + offset;
-                        double x = center.x + 1.2 * Math.cos(angle);
-                        double y = center.y + i * 0.15 - 0.6;
-                        double z = center.z + 1.2 * Math.sin(angle);
-                        positions.add(new Vec3d(x, y, z));
+                int edgePoints = Math.max(1, (int)(20 * quality.get()));
+                // Base edges
+                int[][] baseEdges = {{0,1},{1,2},{2,3},{3,0}};
+                for (int[] e : baseEdges) {
+                    Vec3d c1 = base[e[0]], c2 = base[e[1]];
+                    for (int p = 0; p <= edgePoints; p++) {
+                        double alpha = p / (double)edgePoints;
+                        positions.add(c1.add(c2.subtract(c1).multiply(alpha)));
                     }
                 }
-                break;
-            case CHAINS:
-                // Chain-like links
-                for (int i = 0; i < 12; i++) {
-                    double angle = 2 * Math.PI * i / 12;
-                    double x = center.x + 1.8 * Math.cos(angle);
-                    double y = center.y + Math.sin(angle * 3) * 0.3;
-                    double z = center.z + 1.8 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case COMPANION:
-                // Companion orb
-                for (int i = 0; i < 12; i++) {
-                    double angle = 2 * Math.PI * i / 12 + (System.currentTimeMillis() % 4000) / 4000.0 * 2 * Math.PI;
-                    double x = center.x + 0.8 * Math.cos(angle);
-                    double y = center.y + 0.3;
-                    double z = center.z + 0.8 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case POINT:
-                // Single point at center
-                positions.add(center);
-                break;
-            case POPPER:
-                // Popping particles
-                long timePop = System.currentTimeMillis() % 1500;
-                double popRadius = (timePop < 750) ? timePop / 750.0 * 2 : (1500 - timePop) / 750.0 * 2;
-                for (int i = 0; i < 8; i++) {
-                    double angle = 2 * Math.PI * i / 8;
-                    double x = center.x + popRadius * Math.cos(angle);
-                    double y = center.y;
-                    double z = center.z + popRadius * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case THICK:
-                // Thick ring
-                for (int i = 0; i < 24; i++) {
-                    double angle = 2 * Math.PI * i / 24;
-                    for (int j = 0; j < 3; j++) {
-                        double r = 1.5 + j * 0.3;
-                        double x = center.x + r * Math.cos(angle);
-                        double y = center.y;
-                        double z = center.z + r * Math.sin(angle);
-                        positions.add(new Vec3d(x, y, z));
+                // Side edges
+                for (Vec3d b : base) {
+                    for (int p = 0; p <= edgePoints; p++) {
+                        double alpha = p / (double)edgePoints;
+                        positions.add(b.add(apex.subtract(b).multiply(alpha)));
                     }
                 }
-                break;
-            case OUTLINE:
-                // Outline of a person
-                // Simple approximation with points
-                positions.add(new Vec3d(center.x, center.y + 1.8, center.z)); // Head top
-                positions.add(new Vec3d(center.x, center.y + 1.3, center.z)); // Head bottom
-                positions.add(new Vec3d(center.x, center.y + 0.9, center.z)); // Torso
-                positions.add(new Vec3d(center.x, center.y + 0.2, center.z)); // Legs
-                positions.add(new Vec3d(center.x + 0.3, center.y + 1.0, center.z)); // Arms
-                positions.add(new Vec3d(center.x - 0.3, center.y + 1.0, center.z));
-                break;
-            case OVERHEAD:
-                // Overhead particles
-                for (int i = 0; i < 12; i++) {
-                    double angle = 2 * Math.PI * i / 12;
-                    double x = center.x + 1.2 * Math.cos(angle);
-                    double y = center.y + 2.0;
-                    double z = center.z + 1.2 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
+            }
+
+            case DOUBLE_HELIX -> {
+                int helixPoints = Math.max(1, (int)(50 * quality.get()));
+                for (int i = 0; i < helixPoints; i++) {
+                    double angle = i * 0.08 + t;
+                    double y = i*0.04;
+                    positions.add(center.add(Math.cos(angle)*0.6, y, Math.sin(angle)*0.6));
+                    positions.add(center.add(Math.cos(angle+Math.PI)*0.6, y, Math.sin(angle+Math.PI)*0.6));
                 }
-                break;
-            case FEET:
-                // At feet level
-                for (int i = 0; i < 16; i++) {
-                    double angle = 2 * Math.PI * i / 16;
-                    double x = center.x + 0.8 * Math.cos(angle);
-                    double y = center.y - 1.0;
-                    double z = center.z + 0.8 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case TRAIL:
-                // Trail behind
-                for (int i = 0; i < 10; i++) {
-                    double x = center.x - i * 0.3;
-                    double y = center.y;
-                    double z = center.z;
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case SWORDS:
-                // Sword-like crosses
-                for (int i = 0; i < 4; i++) {
-                    double angle = 2 * Math.PI * i / 4;
-                    double x = center.x + 1.5 * Math.cos(angle);
-                    double y = center.y;
-                    double z = center.z + 1.5 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                    positions.add(new Vec3d(x, y + 0.5, z));
-                    positions.add(new Vec3d(x, y - 0.5, z));
-                }
-                break;
-            case TELEPORT:
-                // Teleport effect
-                long timeTel = System.currentTimeMillis() % 2000;
-                double telY = center.y + (timeTel / 2000.0) * 3;
-                for (int i = 0; i < 8; i++) {
-                    double angle = 2 * Math.PI * i / 8;
-                    double x = center.x + Math.cos(angle);
-                    double z = center.z + Math.sin(angle);
-                    positions.add(new Vec3d(x, telY, z));
-                }
-                break;
-            case DEATH:
-                // Death particles spreading
-                for (int i = 0; i < 15; i++) {
-                    double angle = Math.random() * 2 * Math.PI;
-                    double dist = Math.random() * 3;
-                    double x = center.x + dist * Math.cos(angle);
-                    double y = center.y + Math.random() * 2;
-                    double z = center.z + dist * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case HURT:
-                // Hurt effect
-                for (int i = 0; i < 10; i++) {
-                    double x = center.x + (Math.random() - 0.5) * 2;
-                    double y = center.y + Math.random() * 1.5;
-                    double z = center.z + (Math.random() - 0.5) * 2;
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case MOVE:
-                // Movement trail
-                for (int i = 0; i < 8; i++) {
-                    double x = center.x - i * 0.2;
-                    double y = center.y;
-                    double z = center.z;
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case FISHING:
-                // Fishing line effect
-                for (int i = 0; i < 10; i++) {
-                    double x = center.x;
-                    double y = center.y - i * 0.2;
-                    double z = center.z;
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
-            case BLOCKBREAK:
-                // Block breaking particles
-                for (int i = 0; i < 6; i++) {
-                    for (int j = 0; j < 6; j++) {
-                        for (int k = 0; k < 6; k++) {
-                            double x = center.x + (i - 3) * 0.1;
-                            double y = center.y + (j - 3) * 0.1;
-                            double z = center.z + (k - 3) * 0.1;
-                            positions.add(new Vec3d(x, y, z));
-                        }
+            }
+
+            case ICOSAHEDRON -> {
+                double phi = (1+Math.sqrt(5))/2;
+                Vec3d[] vertices = {
+                    center.add(0,1,phi).multiply(0.7),
+                    center.add(0,-1,phi).multiply(0.7),
+                    center.add(0,1,-phi).multiply(0.7),
+                    center.add(0,-1,-phi).multiply(0.7),
+                    center.add(1,phi,0).multiply(0.7),
+                    center.add(-1,phi,0).multiply(0.7),
+                    center.add(1,-phi,0).multiply(0.7),
+                    center.add(-1,-phi,0).multiply(0.7),
+                    center.add(phi,0,1).multiply(0.7),
+                    center.add(-phi,0,1).multiply(0.7),
+                    center.add(phi,0,-1).multiply(0.7),
+                    center.add(-phi,0,-1).multiply(0.7)
+                };
+                int[][] edges = {
+                    {0,1},{0,4},{0,5},{0,8},{0,9},
+                    {1,6},{1,7},{1,8},{1,9},
+                    {2,3},{2,4},{2,5},{2,10},{2,11},
+                    {3,6},{3,7},{3,10},{3,11},
+                    {4,5},{4,8},{4,9},{4,10},{4,11},
+                    {5,8},{5,9},{5,10},{5,11},
+                    {6,7},{6,8},{6,9},{6,10},{6,11},
+                    {7,8},{7,9},{7,10},{7,11},
+                    {8,9},{8,10},{8,11},
+                    {9,10},{9,11},
+                    {10,11}
+                };
+                int edgePoints = Math.max(1, (int)(10 * quality.get()));
+                for (int[] e : edges) {
+                    Vec3d c1 = vertices[e[0]], c2 = vertices[e[1]];
+                    for (int p = 0; p <= edgePoints; p++) {
+                        double alpha = p / (double)edgePoints;
+                        positions.add(c1.add(c2.subtract(c1).multiply(alpha)));
                     }
                 }
-                break;
-            case BLOCKPLACE:
-                // Block placement effect
-                for (int i = 0; i < 4; i++) {
-                    double x = center.x + (i % 2 == 0 ? 0.5 : -0.5);
-                    double y = center.y;
-                    double z = center.z + (i / 2 == 0 ? 0.5 : -0.5);
-                    positions.add(new Vec3d(x, y, z));
+            }
+
+            case STAR -> {
+                double size = 1.5;
+                Vec3d[] vertices = {
+                    center.add(size, 0, 0),
+                    center.add(-size, 0, 0),
+                    center.add(0, size, 0),
+                    center.add(0, -size, 0),
+                    center.add(0, 0, size),
+                    center.add(0, 0, -size)
+                };
+                int[][] edges = {
+                    {0,2},{0,3},{0,4},{0,5},
+                    {1,2},{1,3},{1,4},{1,5},
+                    {2,4},{2,5},{3,4},{3,5}
+                };
+                int edgePoints = Math.max(1, (int)(20 * quality.get()));
+                for (int[] e : edges) {
+                    Vec3d c1 = vertices[e[0]], c2 = vertices[e[1]];
+                    for (int p = 0; p <= edgePoints; p++) {
+                        double alpha = p / (double)edgePoints;
+                        positions.add(c1.add(c2.subtract(c1).multiply(alpha)));
+                    }
                 }
-                break;
-            case BATMAN:
-                // Batman logo approximation
-                positions.add(new Vec3d(center.x, center.y + 0.5, center.z));
-                for (int i = 0; i < 6; i++) {
-                    double angle = Math.PI * i / 3;
-                    double x = center.x + 0.8 * Math.cos(angle);
-                    double y = center.y;
-                    double z = center.z + 0.8 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
+            }
+
+            case HELIX_RING -> {
+                int points = Math.max(1, (int)(200 * quality.get()));
+                double radius = 1.5;
+                for (int i = 0; i < points; i++) {
+                    double angle = 2*Math.PI*i/points + t;
+                    double y = Math.sin(angle*2)*0.5;
+                    positions.add(center.add(Math.cos(angle)*radius, y, Math.sin(angle)*radius));
                 }
-                break;
-            case INVOCATION:
-                // Invocation circle
-                for (int i = 0; i < 20; i++) {
-                    double angle = 2 * Math.PI * i / 20;
-                    double x = center.x + 2 * Math.cos(angle);
-                    double y = center.y;
-                    double z = center.z + 2 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
+            }
+
+            case DIAMOND -> {
+                double h = 1.5;
+                Vec3d top = center.add(0, h, 0);
+                Vec3d bottom = center.add(0, -h, 0);
+                double s = 1.0;
+                Vec3d[] equator = {
+                    center.add(s, 0, 0),
+                    center.add(-s, 0, 0),
+                    center.add(0, 0, s),
+                    center.add(0, 0, -s)
+                };
+                int edgePoints = Math.max(1, (int)(20 * quality.get()));
+                // Top to equator edges
+                for (Vec3d eq : equator) {
+                    for (int p = 0; p <= edgePoints; p++) {
+                        double alpha = p / (double)edgePoints;
+                        positions.add(top.add(eq.subtract(top).multiply(alpha)));
+                    }
                 }
-                // Add some vertical elements
-                for (int i = 0; i < 5; i++) {
-                    positions.add(new Vec3d(center.x, center.y + i * 0.4, center.z));
+                // Bottom to equator edges
+                for (Vec3d eq : equator) {
+                    for (int p = 0; p <= edgePoints; p++) {
+                        double alpha = p / (double)edgePoints;
+                        positions.add(bottom.add(eq.subtract(bottom).multiply(alpha)));
+                    }
                 }
-                break;
-            default:
-                // Default to normal
-                for (int i = 0; i < 16; i++) {
-                    double angle = 2 * Math.PI * i / 16;
-                    double x = center.x + 3 * Math.cos(angle);
-                    double y = center.y;
-                    double z = center.z + 3 * Math.sin(angle);
-                    positions.add(new Vec3d(x, y, z));
-                }
-                break;
+            }
         }
+
+        // Apply rotation if enabled
+        double currentTime = System.currentTimeMillis() / 1000.0;
+        Vec3d pos;
+        for (int i = 0; i < positions.size(); i++) {
+            pos = positions.get(i);
+            if (rotationSpeedX.get() > 0) {
+                double angleX = currentTime * rotationSpeedX.get() % (2 * Math.PI);
+                pos = rotate(pos, center, angleX, RotationAxis.X);
+            }
+            if (rotationSpeedY.get() > 0) {
+                double angleY = currentTime * rotationSpeedY.get() % (2 * Math.PI);
+                pos = rotate(pos, center, angleY, RotationAxis.Y);
+            }
+            if (rotationSpeedZ.get() > 0) {
+                double angleZ = currentTime * rotationSpeedZ.get() % (2 * Math.PI);
+                pos = rotate(pos, center, angleZ, RotationAxis.Z);
+            }
+            positions.set(i, pos);
+        }
+
         return positions;
     }
 
-    private void sendBlock(BlockPos pos, String command, boolean active) {
-        mc.player.networkHandler.sendPacket(
-            new net.minecraft.network.packet.c2s.play.UpdateCommandBlockC2SPacket(
-                pos,
-                command,
-                active ? net.minecraft.block.entity.CommandBlockBlockEntity.Type.AUTO
-                       : net.minecraft.block.entity.CommandBlockBlockEntity.Type.REDSTONE,
-                true,
-                false,
-                true
-            )
-        );
+    private void clear() {
+        if (CoreCommand.corePositions.isEmpty()) return;
+        List<String> emptyCommands = new ArrayList<>();
+        for (int i = 0; i < CoreCommand.corePositions.size(); i++) {
+            emptyCommands.add("say ");
+        }
+        CoreUpdater.startAuto(CoreCommand.corePositions, emptyCommands, false, true, maxPacketsPerTick.get());
+        CoreUpdater.onTick();
+    }
+
+    private Vec3d rotate(Vec3d point, Vec3d center, double angle, RotationAxis axis) {
+        Vec3d relative = point.subtract(center);
+        double cos = Math.cos(angle);
+        double sin = Math.sin(angle);
+        double x = relative.x, y = relative.y, z = relative.z;
+        switch (axis) {
+            case X -> {
+                double ny = y * cos - z * sin;
+                double nz = y * sin + z * cos;
+                return center.add(x, ny, nz);
+            }
+            case Y -> {
+                double nx = x * cos + z * sin;
+                double nz = -x * sin + z * cos;
+                return center.add(nx, y, nz);
+            }
+            case Z -> {
+                double nx = x * cos - y * sin;
+                double ny = x * sin + y * cos;
+                return center.add(nx, ny, z);
+            }
+        }
+        return point;
     }
 }

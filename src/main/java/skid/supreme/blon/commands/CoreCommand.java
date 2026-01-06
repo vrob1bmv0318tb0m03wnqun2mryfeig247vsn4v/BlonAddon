@@ -13,6 +13,14 @@ public class CoreCommand extends Command {
     // Static list accessible by other commands
     public static final List<BlockPos> corePositions = new ArrayList<>();
 
+    // Static variables for refresh
+    private static Integer lastCenterX = null;
+    private static Integer lastCenterZ = null;
+    private static Integer lastY = null;
+    private static Integer lastHeight = 32;
+    private static Integer lastChunkX = null;
+    private static Integer lastChunkZ = null;
+
     public CoreCommand() {
         super("core", "Spawns a chunk-perfect 16x16x32 command block core.");
     }
@@ -27,6 +35,11 @@ public class CoreCommand extends Command {
 
         builder.then(literal("decore").executes(ctx -> {
             decore();
+            return SINGLE_SUCCESS;
+        }));
+
+        builder.then(literal("refresh").executes(ctx -> {
+            refreshCore();
             return SINGLE_SUCCESS;
         }));
     }
@@ -54,6 +67,14 @@ public class CoreCommand extends Command {
                 }
             }
         }
+
+        // Store last values for refresh
+        lastCenterX = centerX;
+        lastCenterZ = centerZ;
+        lastY = y;
+        lastHeight = height;
+        lastChunkX = chunkX;
+        lastChunkZ = chunkZ;
     }
 
     // Execute the fill commands as before
@@ -124,6 +145,52 @@ public class CoreCommand extends Command {
             " minecraft:air"
         );
 
+        // Clear the core positions list
+        corePositions.clear();
+
+        // Clear last values
+        lastCenterX = null;
+        lastCenterZ = null;
+        lastY = null;
+        lastHeight = 32;
+        lastChunkX = null;
+        lastChunkZ = null;
+
         info("16x16x32 core removed in chunk (" + chunkX + ", " + chunkZ + ") at Y=" + y);
+    }
+
+    private void refreshCore() {
+        if (mc.player == null) return;
+
+        if (!mc.player.getAbilities().creativeMode) {
+            error("Creative mode required.");
+            return;
+        }
+
+        if (lastCenterX == null) {
+            error("No core to refresh. Use .core first.");
+            return;
+        }
+
+        // Force load the chunk
+        mc.player.networkHandler.sendChatCommand("forceload add " + lastChunkX + " " + lastChunkZ);
+
+        // Red stained glass shell
+        mc.player.networkHandler.sendChatCommand(
+            "fill " +
+            (lastCenterX - 8) + " " + lastY + " " + (lastCenterZ - 8) + " " +
+            (lastCenterX + 7) + " " + (lastY + lastHeight - 1) + " " + (lastCenterZ + 7) +
+            " minecraft:red_stained_glass"
+        );
+
+        // Inner command blocks
+        mc.player.networkHandler.sendChatCommand(
+            "fill " +
+            (lastCenterX - 7) + " " + (lastY + 1) + " " + (lastCenterZ - 7) + " " +
+            (lastCenterX + 6) + " " + (lastY + lastHeight - 2) + " " + (lastCenterZ + 6) +
+            " minecraft:command_block[facing=up]{auto:1b}"
+        );
+
+        info("16x16x32 core refreshed in chunk (" + lastChunkX + ", " + lastChunkZ + ") at Y=" + lastY);
     }
 }

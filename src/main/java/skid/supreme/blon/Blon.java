@@ -12,10 +12,13 @@ import net.minecraft.item.Items;
 import skid.supreme.blon.commands.InventoryStealCommand;
 import skid.supreme.blon.commands.CoreCommand;
 import skid.supreme.blon.commands.LoopCommand;
+import skid.supreme.blon.commands.AdCommand;
+
 import skid.supreme.blon.modules.ChatBubble;
 import skid.supreme.blon.modules.ImageEggs;
 import skid.supreme.blon.modules.LegitKillAura;
 import skid.supreme.blon.modules.TotemBypass;
+import skid.supreme.blon.modules.NoParticleSpamModule;
 
 
 public class Blon extends MeteorAddon {
@@ -33,11 +36,13 @@ public class Blon extends MeteorAddon {
                 Modules.get().add(new ChatBubble());
                 Modules.get().add(new LegitKillAura());
                 Modules.get().add(new ParticleAuraModule());
+                Modules.get().add(new NoParticleSpamModule());
 
                 // Register commands
                 Commands.add(new InventoryStealCommand());
                 Commands.add(new LoopCommand());
                 Commands.add(new CoreCommand());
+                Commands.add(new AdCommand());
                 
         }
 
