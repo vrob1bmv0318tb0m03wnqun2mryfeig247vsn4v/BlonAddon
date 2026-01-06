@@ -5,7 +5,7 @@ Modules:
 - ImageEggs - Creates an image ingame using text displays (PLACE IMAGES IN THE IMAGE FOLDER IN YOUR MINECRAFT DIRECTORY IF IT ISNT THERE CREATE IT)
 - LegitKillAura - Legit killaura (WIP STILL GETS DETECTED)
 - NoParticleSpamModule - Removes particle spam from certain effects
-- ParticleAuraModule - Creates particle auras around players
+- ParticleAuraModule - Creates particle auras around players using the core
 - TotemBypass - Bypasses Totems With Mace
 
 Commands:
@@ -18,5 +18,5 @@ Commands:
 
 DISCORD: @every_ne
 ----BLON---
-PLEASE GIVE SUGGESTIONS IN THE DISCORD 
+PLEASE GIVE SUGGESTIONS IN THE DISCORD
 https://discord.gg/5PFjMYh6SG
