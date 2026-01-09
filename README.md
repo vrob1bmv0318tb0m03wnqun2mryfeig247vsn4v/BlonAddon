@@ -13,7 +13,7 @@ Features as of now
 
 ### Commands:
 - **.ad** - Sends a tellraw advertisement with Discord links.
-- **.core** - Spawns a 16x16x32 command block core (`.core`), removes it (`.decore`), or refreshes it (`.refresh`).
+- **.core** - Spawns a 16x16x32 command block core (`.core`), removes it (`.core decore`), or refreshes it (`.core refresh`).
 - **.function** - Controls the song player.
 - **.invsteal** - Steals any player's inventory using command blocks.
 - **.loop** - Loops a command by creating a repeating command block.
