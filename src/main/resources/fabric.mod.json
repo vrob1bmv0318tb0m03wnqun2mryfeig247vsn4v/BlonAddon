@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "blon-addon",
+  "version": "1.0.0",
+  "name": "Blon",
+  "description": "Blon is the best skidded atp.",
+  "authors": [
+    "blon (@every_ne)"
+  ],
+  "contact": {
+    "repo": "ill add this later"
+  },
+  "icon": "assets/icon/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "skid.supreme.blon.Blon"
+    ]
+  },
+
+  "custom": {
+    "meteor-client:color": "255,0,67"
+  },
+  "depends": {
+    "java": ">=21",
+    "minecraft": ">=${mc_version}",
+    "meteor-client": "*"
+  }
+}
