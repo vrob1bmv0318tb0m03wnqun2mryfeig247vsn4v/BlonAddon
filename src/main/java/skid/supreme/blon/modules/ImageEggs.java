@@ -80,7 +80,7 @@ public class ImageEggs extends Module {
     private final Setting<Double> distance = sg.add(new DoubleSetting.Builder()
             .name("distance-from-player")
             .defaultValue(3.0)
-            .min(0.5)
+            .min(0.0)
             .sliderMax(10.0)
             .build());
 
@@ -90,7 +90,9 @@ public class ImageEggs extends Module {
             .defaultValue(Mode.NORMAL)
             .build());
 
-    public enum Mode { NORMAL, OVERLAP }
+    public enum Mode {
+        NORMAL, OVERLAP
+    }
 
     public enum RenderMode {
         QUALITY,
@@ -103,12 +105,11 @@ public class ImageEggs extends Module {
     }
 
     private final Setting<RenderMode> renderMode = sg.add(
-        new EnumSetting.Builder<RenderMode>()
-            .name("render-mode")
-            .description("Quality = gap-filled, overlapped. Performance = fewer entities.")
-            .defaultValue(RenderMode.QUALITY)
-            .build()
-    );
+            new EnumSetting.Builder<RenderMode>()
+                    .name("render-mode")
+                    .description("Quality = gap-filled, overlapped. Performance = fewer entities.")
+                    .defaultValue(RenderMode.QUALITY)
+                    .build());
 
     private final Setting<String> billboardMode = sg.add(new StringSetting.Builder()
             .name("billboard-mode")
@@ -132,25 +133,24 @@ public class ImageEggs extends Module {
             .build());
 
     private final Setting<Integer> tileSize = sg.add(
-        new IntSetting.Builder()
-            .name("tile-size")
-            .defaultValue(10)
-            .min(2)
-            .sliderMax(32)
-            .build()
-    );
+            new IntSetting.Builder()
+                    .name("tile-size")
+                    .defaultValue(10)
+                    .min(2)
+                    .sliderMax(32)
+                    .build());
 
     private final Setting<PositionMode> positionMode = sg.add(
-        new EnumSetting.Builder<PositionMode>()
-            .name("position-mode")
-            .description("OPERATOR uses Pos NBT. CREATIVE uses transformation translation.")
-            .defaultValue(PositionMode.OPERATOR)
-            .build()
-    );
+            new EnumSetting.Builder<PositionMode>()
+                    .name("position-mode")
+                    .description("OPERATOR uses Pos NBT. CREATIVE uses transformation translation.")
+                    .defaultValue(PositionMode.OPERATOR)
+                    .build());
 
     private static final String PIXEL = "█";
 
-    private record Pixel(Vec3d pos, String json, int width, float scale) {}
+    private record Pixel(Vec3d pos, String json, int width, float scale) {
+    }
 
     private final Queue<Pixel> queue = new LinkedList<>();
     private int ticks;
@@ -168,21 +168,22 @@ public class ImageEggs extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Post e) {
-        if (queue.isEmpty() || mc.currentScreen != null) return;
+        if (queue.isEmpty() || mc.currentScreen != null)
+            return;
 
-        if (++ticks < tickDelay.get()) return;
+        if (++ticks < tickDelay.get())
+            return;
         ticks = 0;
 
         Pixel p = queue.poll();
         spawnTextDisplay(p);
     }
 
-
-
     private void loadImage() {
         try {
             File dir = new File(mc.runDirectory, "images");
-            if (!dir.exists()) dir.mkdirs();
+            if (!dir.exists())
+                dir.mkdirs();
 
             File file = new File(dir, imageFile.get());
             info("Loading image from: " + file.getAbsolutePath());
@@ -203,7 +204,6 @@ public class ImageEggs extends Module {
             double px = scale.get() * 0.55;
             double py = scale.get() * fontRatio.get() * verticalScale.get();
 
-
             double offsetX = 0.025 * scale.get();
 
             double finalVerticalScale = scale.get() * verticalScale.get() * fontRatio.get();
@@ -211,7 +211,7 @@ public class ImageEggs extends Module {
 
             boolean fillGapsEnabled = renderMode.get() == RenderMode.QUALITY;
 
-            int totalTiles = (int) Math.ceil((double)img.getHeight() / (step * rowsPerTile));
+            int totalTiles = (int) Math.ceil((double) img.getHeight() / (step * rowsPerTile));
 
             for (int tileY = 0; tileY < img.getHeight(); tileY += step * rowsPerTile) {
                 StringBuilder json = new StringBuilder("[");
@@ -219,14 +219,16 @@ public class ImageEggs extends Module {
 
                 for (int row = 0; row < rowsPerTile; row++) {
                     int y = tileY + row * step;
-                    if (y >= img.getHeight()) break;
+                    if (y >= img.getHeight())
+                        break;
 
                     Color lastColor = null;
                     StringBuilder currText = new StringBuilder();
 
                     for (int x = 0; x < img.getWidth(); x += step) {
                         Color c = new Color(img.getRGB(x, y), true);
-                        if (c.getAlpha() == 0) c = Color.WHITE;
+                        if (c.getAlpha() == 0)
+                            c = Color.WHITE;
                         c = new Color(c.getRed(), c.getGreen(), c.getBlue(), 255);
 
                         if (renderMode.get() == RenderMode.PERFORMANCE) {
@@ -234,12 +236,13 @@ public class ImageEggs extends Module {
                         }
 
                         if (lastColor != null && !lastColor.equals(c)) {
-                            if (!firstComponent) json.append(",");
+                            if (!firstComponent)
+                                json.append(",");
                             json.append("{\"text\":\"")
-                                .append(currText)
-                                .append("\",\"color\":\"")
-                                .append(toHex(lastColor))
-                                .append("\"}");
+                                    .append(currText)
+                                    .append("\",\"color\":\"")
+                                    .append(toHex(lastColor))
+                                    .append("\"}");
                             firstComponent = false;
                             currText.setLength(0);
                         }
@@ -248,17 +251,19 @@ public class ImageEggs extends Module {
                     }
 
                     if (currText.length() > 0) {
-                        if (!firstComponent) json.append(",");
+                        if (!firstComponent)
+                            json.append(",");
                         json.append("{\"text\":\"")
-                            .append(currText)
-                            .append("\",\"color\":\"")
-                            .append(toHex(lastColor))
-                            .append("\"}");
+                                .append(currText)
+                                .append("\",\"color\":\"")
+                                .append(toHex(lastColor))
+                                .append("\"}");
                         firstComponent = false;
                     }
 
                     if (row < rowsPerTile - 1) {
-                        if (!firstComponent) json.append(",");
+                        if (!firstComponent)
+                            json.append(",");
                         json.append("{\"text\":\"\\n\"}");
                         firstComponent = false;
                     }
@@ -278,24 +283,22 @@ public class ImageEggs extends Module {
                 double gapOffset = py * 0.18;
 
                 double[][] offsets = fillGapsEnabled ? new double[][] {
-                    {0,0}, {0, offsetY}, {offsetX,0}, {offsetX, offsetY}
-                } : new double[][] {{0,0}};
+                        { 0, 0 }, { 0, offsetY }, { offsetX, 0 }, { offsetX, offsetY }
+                } : new double[][] { { 0, 0 } };
 
                 for (double[] offset : offsets) {
                     queue.add(new Pixel(
-                        new Vec3d(xPos + offset[0], yPos + offset[1], base.z),
-                        json.toString(),
-                        lineWidth,
-                        scale.get().floatValue()
-                    ));
+                            new Vec3d(xPos + offset[0], yPos + offset[1], base.z),
+                            json.toString(),
+                            lineWidth,
+                            scale.get().floatValue()));
 
                     if (fillGapsEnabled) {
                         queue.add(new Pixel(
-                            new Vec3d(xPos + offset[0], yPos + offset[1] - gapOffset, base.z),
-                            json.toString(),
-                            lineWidth,
-                            scale.get().floatValue()
-                        ));
+                                new Vec3d(xPos + offset[0], yPos + offset[1] - gapOffset, base.z),
+                                json.toString(),
+                                lineWidth,
+                                scale.get().floatValue()));
                     }
                 }
             }
@@ -306,17 +309,15 @@ public class ImageEggs extends Module {
         }
     }
 
-
-
     private void spawnTextDisplay(Pixel p) {
         try {
-            if (!mc.player.getAbilities().creativeMode) return;
+            if (!mc.player.getAbilities().creativeMode)
+                return;
 
             BlockHitResult hit = (BlockHitResult) mc.player.raycast(
-                6.0,
-                1.0f,
-                false
-            );
+                    6.0,
+                    1.0f,
+                    false);
             Vec3d spawnPos = hit.getPos();
             Vec3d targetPos = p.pos;
             Vec3d offset = targetPos.subtract(spawnPos);
@@ -338,7 +339,6 @@ public class ImageEggs extends Module {
                 posList.add(NbtDouble.of(spawnPos.z));
                 entity.put("Pos", posList);
             }
-
 
             if (newestVersion.get()) {
                 NbtList extraList = new NbtList();
@@ -455,14 +455,15 @@ public class ImageEggs extends Module {
     }
 
     private Color quantize(Color c, int levels) {
-        int r = (c.getRed()   * levels / 256) * (256 / levels);
+        int r = (c.getRed() * levels / 256) * (256 / levels);
         int g = (c.getGreen() * levels / 256) * (256 / levels);
-        int b = (c.getBlue()  * levels / 256) * (256 / levels);
+        int b = (c.getBlue() * levels / 256) * (256 / levels);
         return new Color(r, g, b);
     }
 
     private void probeTextDisplayLimit() {
-        if (!mc.player.getAbilities().creativeMode) return;
+        if (!mc.player.getAbilities().creativeMode)
+            return;
 
         info("Starting text_display brute-force probe...");
 
@@ -539,12 +540,11 @@ public class ImageEggs extends Module {
             entity.putInt("line_width", 2000);
             entity.putString("billboard", "fixed");
 
-            TypedEntityData<EntityType<?>> data =
-                TypedEntityData.create(EntityType.TEXT_DISPLAY, entity);
+            TypedEntityData<EntityType<?>> data = TypedEntityData.create(EntityType.TEXT_DISPLAY, entity);
 
             egg.applyChanges(ComponentChanges.builder()
-                .add(DataComponentTypes.ENTITY_DATA, data)
-                .build());
+                    .add(DataComponentTypes.ENTITY_DATA, data)
+                    .build());
 
             ItemStack old = mc.player.getMainHandStack();
             mc.interactionManager.clickCreativeStack(egg, 36 + mc.player.getInventory().selectedSlot);
@@ -552,11 +552,10 @@ public class ImageEggs extends Module {
             BlockPos bp = BlockPos.ofFloored(mc.player.getX(), mc.player.getY() - 1, mc.player.getZ());
 
             BlockHitResult bhr = new BlockHitResult(
-                mc.player.getEntityPos(),
-                Direction.UP,
-                bp,
-                false
-            );
+                    mc.player.getEntityPos(),
+                    Direction.UP,
+                    bp,
+                    false);
 
             mc.interactionManager.interactBlock(mc.player, Hand.MAIN_HAND, bhr);
             mc.interactionManager.clickCreativeStack(old, 36 + mc.player.getInventory().selectedSlot);
@@ -576,7 +575,7 @@ public class ImageEggs extends Module {
             JsonObject o = new JsonObject();
             o.addProperty("text", "█");
             o.addProperty("color",
-                String.format("#%06X", (i * 997) & 0xFFFFFF));
+                    String.format("#%06X", (i * 997) & 0xFFFFFF));
             arr.add(o);
             chars++;
         }
@@ -608,7 +607,7 @@ public class ImageEggs extends Module {
                 JsonObject o = new JsonObject();
                 o.addProperty("text", "█");
                 o.addProperty("color",
-                    ((x + y) & 1) == 0 ? "#ffffff" : "#000000");
+                        ((x + y) & 1) == 0 ? "#ffffff" : "#000000");
                 arr.add(o);
                 chars++;
             }

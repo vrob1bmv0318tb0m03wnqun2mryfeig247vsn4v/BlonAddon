@@ -1,5 +1,6 @@
 package skid.supreme.blon.commands;
 
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import meteordevelopment.meteorclient.commands.Command;
 import net.minecraft.command.CommandSource;
@@ -17,21 +18,42 @@ public class CoreCommand extends Command {
     private static Integer lastCenterX = null;
     private static Integer lastCenterZ = null;
     private static Integer lastY = null;
+    private static Integer lastWidth = 16;
+    private static Integer lastLength = 16;
     private static Integer lastHeight = 32;
     private static Integer lastChunkX = null;
     private static Integer lastChunkZ = null;
 
     public CoreCommand() {
-        super("core", "Spawns a chunk-perfect 16x16x32 command block core.");
+        super("core", "Spawns a core with custom dimensions: .core [w] [l] [h]. Default 16x16x32.");
     }
 
     @Override
     public void build(LiteralArgumentBuilder<CommandSource> builder) {
+        // Default: 16x16x32
         builder.executes(ctx -> {
-            calculateCorePositions();
-            placeCore();
+            placeCore(16, 16, 32, false);
             return SINGLE_SUCCESS;
         });
+
+        // .core <height> -> 16x16x<height>
+        builder.then(argument("height", IntegerArgumentType.integer(1, 256)).executes(ctx -> {
+            int height = IntegerArgumentType.getInteger(ctx, "height");
+            placeCore(16, 16, height, false);
+            return SINGLE_SUCCESS;
+        }));
+
+        // .core <width> <length> <height>
+        builder.then(argument("width", IntegerArgumentType.integer(3, 128))
+                .then(argument("length", IntegerArgumentType.integer(3, 128))
+                        .then(argument("height", IntegerArgumentType.integer(1, 256))
+                                .executes(ctx -> {
+                                    int width = IntegerArgumentType.getInteger(ctx, "width");
+                                    int length = IntegerArgumentType.getInteger(ctx, "length");
+                                    int height = IntegerArgumentType.getInteger(ctx, "height");
+                                    placeCore(width, length, height, false);
+                                    return SINGLE_SUCCESS;
+                                }))));
 
         builder.then(literal("decore").executes(ctx -> {
             decore();
@@ -44,123 +66,114 @@ public class CoreCommand extends Command {
         }));
     }
 
-    // Calculate positions only
-    private void calculateCorePositions() {
+    // Calculate positions based on specified dimensions
+    private void calculateCorePositions(int width, int length, int height, boolean isRefresh) {
         corePositions.clear();
-        if (mc.player == null) return;
+        if (mc.player == null)
+            return;
 
-        BlockPos playerPos = mc.player.getBlockPos();
+        int chunkX, chunkZ, centerX, centerZ, y;
 
-        int chunkX = playerPos.getX() >> 4;
-        int chunkZ = playerPos.getZ() >> 4;
+        if (isRefresh && lastCenterX != null) {
+            // Use stored values
+            chunkX = lastChunkX;
+            chunkZ = lastChunkZ;
+            centerX = lastCenterX;
+            centerZ = lastCenterZ;
+            y = lastY;
+        } else {
+            // New position from player
+            BlockPos playerPos = mc.player.getBlockPos();
+            chunkX = playerPos.getX() >> 4;
+            chunkZ = playerPos.getZ() >> 4;
+            centerX = (chunkX << 4) + 8;
+            centerZ = (chunkZ << 4) + 8;
+            y = Math.min(playerPos.getY() + 60, 303);
+        }
 
-        int centerX = (chunkX << 4) + 8;
-        int centerZ = (chunkZ << 4) + 8;
+        int halfWidth = width / 2;
+        int halfLength = length / 2;
 
-        int y = Math.min(playerPos.getY() + 60, 303);
-        int height = 32;
+        int startX = centerX - halfWidth;
+        int endX = startX + width - 1;
 
-        for (int x = centerX - 7; x <= centerX + 6; x++) {
-            for (int z = centerZ - 7; z <= centerZ + 6; z++) {
+        int startZ = centerZ - halfLength;
+        int endZ = startZ + length - 1;
+
+        // Inner bounds (shrink by 1 on all sides)
+        for (int x = startX + 1; x < endX; x++) {
+            for (int z = startZ + 1; z < endZ; z++) {
                 for (int h = y + 1; h <= y + height - 2; h++) {
                     corePositions.add(new BlockPos(x, h, z));
                 }
             }
         }
 
-        // Store last values for refresh
+        // Store last values
         lastCenterX = centerX;
         lastCenterZ = centerZ;
         lastY = y;
+        lastWidth = width;
+        lastLength = length;
         lastHeight = height;
         lastChunkX = chunkX;
         lastChunkZ = chunkZ;
     }
 
-    // Execute the fill commands as before
-    private void placeCore() {
-        if (mc.player == null) return;
+    private void placeCore(int width, int length, int height, boolean isRefresh) {
+        if (mc.player == null)
+            return;
 
         if (!mc.player.getAbilities().creativeMode) {
             error("Creative mode required.");
             return;
         }
 
-        BlockPos playerPos = mc.player.getBlockPos();
-        int chunkX = playerPos.getX() >> 4;
-        int chunkZ = playerPos.getZ() >> 4;
+        // Must update positions and static vars first
+        calculateCorePositions(width, length, height, isRefresh);
 
-        int centerX = (chunkX << 4) + 8;
-        int centerZ = (chunkZ << 4) + 8;
-        int y = Math.min(playerPos.getY() + 60, 303);
-        int height = 32;
+        int chunkX = lastChunkX;
+        int chunkZ = lastChunkZ;
+        int centerX = lastCenterX;
+        int centerZ = lastCenterZ;
+        int y = lastY;
 
-        // Force load the chunk
+        int halfWidth = width / 2;
+        int halfLength = length / 2;
+        int startX = centerX - halfWidth;
+        int endX = startX + width - 1;
+        int startZ = centerZ - halfLength;
+        int endZ = startZ + length - 1;
+
+        // Force load chunk
         mc.player.networkHandler.sendChatCommand("forceload add " + chunkX + " " + chunkZ);
 
-        // Red stained glass shell
+        // Increase gamerule limit temporarily
+        mc.player.networkHandler.sendChatCommand("gamerule commandModificationBlockLimit 2000000");
+
+        // Shell
         mc.player.networkHandler.sendChatCommand(
-            "fill " +
-            (centerX - 8) + " " + y + " " + (centerZ - 8) + " " +
-            (centerX + 7) + " " + (y + height - 1) + " " + (centerZ + 7) +
-            " minecraft:red_stained_glass"
-        );
+                "fill " +
+                        startX + " " + y + " " + startZ + " " +
+                        endX + " " + (y + height - 1) + " " + endZ +
+                        " minecraft:red_stained_glass");
 
         // Inner command blocks
         mc.player.networkHandler.sendChatCommand(
-            "fill " +
-            (centerX - 7) + " " + (y + 1) + " " + (centerZ - 7) + " " +
-            (centerX + 6) + " " + (y + height - 2) + " " + (centerZ + 6) +
-            " minecraft:command_block[facing=up]{auto:1b}"
-        );
+                "fill " +
+                        (startX + 1) + " " + (y + 1) + " " + (startZ + 1) + " " +
+                        (endX - 1) + " " + (y + height - 2) + " " + (endZ - 1) +
+                        " minecraft:command_block[facing=up]{auto:0b}");
 
-        info("16x16x32 core spawned in chunk (" + chunkX + ", " + chunkZ + ") at Y=" + y);
+        // Reset gamerule
+        mc.player.networkHandler.sendChatCommand("gamerule commandModificationBlockLimit 32768");
+
+        info(width + "x" + length + "x" + height + " core spawned in chunk (" + chunkX + ", " + chunkZ + ") at Y=" + y);
     }
 
     private void decore() {
-        if (mc.player == null) return;
-
-        if (!mc.player.getAbilities().creativeMode) {
-            error("Creative mode required.");
+        if (mc.player == null)
             return;
-        }
-
-        BlockPos playerPos = mc.player.getBlockPos();
-        int chunkX = playerPos.getX() >> 4;
-        int chunkZ = playerPos.getZ() >> 4;
-
-        int centerX = (chunkX << 4) + 8;
-        int centerZ = (chunkZ << 4) + 8;
-        int y = Math.min(playerPos.getY() + 60, 303);
-        int height = 32;
-
-        // Force load the chunk
-        mc.player.networkHandler.sendChatCommand("forceload add " + chunkX + " " + chunkZ);
-
-        // Fill the entire core area with air
-        mc.player.networkHandler.sendChatCommand(
-            "fill " +
-            (centerX - 8) + " " + y + " " + (centerZ - 8) + " " +
-            (centerX + 7) + " " + (y + height - 1) + " " + (centerZ + 7) +
-            " minecraft:air"
-        );
-
-        // Clear the core positions list
-        corePositions.clear();
-
-        // Clear last values
-        lastCenterX = null;
-        lastCenterZ = null;
-        lastY = null;
-        lastHeight = 32;
-        lastChunkX = null;
-        lastChunkZ = null;
-
-        info("16x16x32 core removed in chunk (" + chunkX + ", " + chunkZ + ") at Y=" + y);
-    }
-
-    private void refreshCore() {
-        if (mc.player == null) return;
 
         if (!mc.player.getAbilities().creativeMode) {
             error("Creative mode required.");
@@ -168,29 +181,68 @@ public class CoreCommand extends Command {
         }
 
         if (lastCenterX == null) {
-            error("No core to refresh. Use .core first.");
+            error("No core to remove. Place one first.");
             return;
         }
 
-        // Force load the chunk
-        mc.player.networkHandler.sendChatCommand("forceload add " + lastChunkX + " " + lastChunkZ);
+        int chunkX = lastChunkX;
+        int chunkZ = lastChunkZ;
+        int centerX = lastCenterX;
+        int centerZ = lastCenterZ;
+        int y = lastY;
+        int width = lastWidth;
+        int length = lastLength;
+        int height = lastHeight;
 
-        // Red stained glass shell
+        int halfWidth = width / 2;
+        int halfLength = length / 2;
+        int startX = centerX - halfWidth;
+        int endX = startX + width - 1;
+        int startZ = centerZ - halfLength;
+        int endZ = startZ + length - 1;
+
+        mc.player.networkHandler.sendChatCommand("forceload add " + chunkX + " " + chunkZ);
+
+        // Increase limit for clearing large cores
+        mc.player.networkHandler.sendChatCommand("gamerule commandModificationBlockLimit 2000000");
+
         mc.player.networkHandler.sendChatCommand(
-            "fill " +
-            (lastCenterX - 8) + " " + lastY + " " + (lastCenterZ - 8) + " " +
-            (lastCenterX + 7) + " " + (lastY + lastHeight - 1) + " " + (lastCenterZ + 7) +
-            " minecraft:red_stained_glass"
-        );
+                "fill " +
+                        startX + " " + y + " " + startZ + " " +
+                        endX + " " + (y + height - 1) + " " + endZ +
+                        " minecraft:air");
 
-        // Inner command blocks
-        mc.player.networkHandler.sendChatCommand(
-            "fill " +
-            (lastCenterX - 7) + " " + (lastY + 1) + " " + (lastCenterZ - 7) + " " +
-            (lastCenterX + 6) + " " + (lastY + lastHeight - 2) + " " + (lastCenterZ + 6) +
-            " minecraft:command_block[facing=up]{auto:1b}"
-        );
+        mc.player.networkHandler.sendChatCommand("gamerule commandModificationBlockLimit 32768");
 
-        info("16x16x32 core refreshed in chunk (" + lastChunkX + ", " + lastChunkZ + ") at Y=" + lastY);
+        corePositions.clear();
+        lastCenterX = null;
+        lastCenterZ = null;
+        lastY = null;
+        lastWidth = 16;
+        lastLength = 16;
+        lastHeight = 32;
+        lastChunkX = null;
+        lastChunkZ = null;
+
+        info("Core removed in chunk (" + chunkX + ", " + chunkZ + ") at Y=" + y);
+    }
+
+    private void refreshCore() {
+        if (mc.player == null)
+            return;
+
+        if (!mc.player.getAbilities().creativeMode) {
+            error("Creative mode required.");
+            return;
+        }
+
+        if (lastCenterX == null) {
+            error("No core to refresh.");
+            return;
+        }
+
+        // reuse placeCore logic
+        placeCore(lastWidth, lastLength, lastHeight, true);
+        info("Refreshed");
     }
 }

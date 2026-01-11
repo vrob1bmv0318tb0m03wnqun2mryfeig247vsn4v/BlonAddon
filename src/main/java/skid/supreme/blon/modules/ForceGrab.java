@@ -1,15 +1,13 @@
 package skid.supreme.blon.modules;
 
 import meteordevelopment.meteorclient.events.world.TickEvent;
-import meteordevelopment.meteorclient.settings.DoubleSetting;
-import meteordevelopment.meteorclient.settings.Setting;
-import meteordevelopment.meteorclient.settings.SettingGroup;
+import meteordevelopment.meteorclient.events.world.TickEvent;
+import meteordevelopment.meteorclient.settings.*;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.block.entity.CommandBlockBlockEntity;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.network.packet.c2s.play.UpdateCommandBlockC2SPacket;
 import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
@@ -18,7 +16,10 @@ import net.minecraft.util.math.Vec3d;
 import org.lwjgl.glfw.GLFW;
 import skid.supreme.blon.Blon;
 import skid.supreme.blon.commands.CoreCommand;
+import skid.supreme.blon.core.CoreUpdater;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 public class ForceGrab extends Module {
@@ -30,6 +31,33 @@ public class ForceGrab extends Module {
             .defaultValue(3.0)
             .min(1.0)
             .sliderMax(20.0)
+            .build());
+
+    private final Setting<Boolean> tracer = sgGeneral.add(new BoolSetting.Builder()
+            .name("tracer")
+            .description("Draws a line of particles to the target.")
+            .defaultValue(true)
+            .build());
+
+    private final Setting<String> particleType = sgGeneral.add(new StringSetting.Builder()
+            .name("particle-type")
+            .description("The type of particle to use.")
+            .defaultValue("end_rod")
+            .visible(tracer::get)
+            .build());
+
+    private final Setting<Double> throwForce = sgGeneral.add(new DoubleSetting.Builder()
+            .name("throw-force")
+            .description("Force to throw the entity.")
+            .defaultValue(5.0)
+            .min(1.0)
+            .sliderMax(20.0)
+            .build());
+
+    private final Setting<Boolean> throwTrigger = sgGeneral.add(new BoolSetting.Builder()
+            .name("throw")
+            .description("Throws the currently grabbed entity.")
+            .defaultValue(false)
             .build());
 
     private Entity target;
@@ -61,11 +89,20 @@ public class ForceGrab extends Module {
     }
 
     private boolean inputWasPressed = false;
+    private boolean throwInputWasPressed = false;
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
         if (mc.player == null)
             return;
+
+        // Process Throw Trigger from GUI
+        if (throwTrigger.get()) {
+            if (target != null) {
+                throwTarget();
+            }
+            throwTrigger.set(false);
+        }
 
         // Poll Input
         if (mc.currentScreen == null) {
@@ -81,6 +118,15 @@ public class ForceGrab extends Module {
                 handleGrabInput();
             }
             inputWasPressed = pressed;
+
+            boolean throwPressed = GLFW.glfwGetKey(mc.getWindow().getHandle(),
+                    GLFW.GLFW_KEY_RIGHT_BRACKET) == GLFW.GLFW_PRESS;
+            if (throwPressed && !throwInputWasPressed) {
+                if (target != null) {
+                    throwTarget();
+                }
+            }
+            throwInputWasPressed = throwPressed;
         }
 
         if (target != null && !target.isAlive()) { // Corrected from original instruction's `!target.isAlive() ||
@@ -116,6 +162,60 @@ public class ForceGrab extends Module {
                 false, // Conditional
                 true // Always Active
         ));
+
+        // Update Tracer
+        if (tracer.get()) {
+            updateTracer(eyePos, targetPos);
+        } else {
+            clearTracer();
+        }
+    }
+
+    private void updateTracer(Vec3d start, Vec3d end) {
+        if (CoreCommand.corePositions.size() < 2)
+            return; // Need at least 1 block for grab, others for tracer
+
+        List<Vec3d> points = new ArrayList<>();
+        double dist = start.distanceTo(end);
+        int count = (int) (dist * 2); // 2 particles per block
+        for (int i = 0; i <= count; i++) {
+            double t = (double) i / count;
+            points.add(start.lerp(end, t));
+        }
+
+        // We can use core blocks starting from index 1 (0 is used for grab)
+        List<BlockPos> availableCores = CoreCommand.corePositions.subList(1, CoreCommand.corePositions.size());
+        int needed = Math.min(points.size(), availableCores.size());
+
+        List<BlockPos> coresToUse = new ArrayList<>();
+        List<String> commands = new ArrayList<>();
+
+        for (int i = 0; i < needed; i++) {
+            Vec3d pos = points.get(i);
+            coresToUse.add(availableCores.get(i));
+            commands.add(String.format(Locale.US,
+                    "particle minecraft:%s %.3f %.3f %.3f 0 0 0 0.001 1",
+                    particleType.get(),
+                    pos.x, pos.y, pos.z));
+        }
+
+        // Reuse CoreUpdater logic
+        CoreUpdater.startAuto(coresToUse, commands, false, true, 50);
+        CoreUpdater.onTick();
+    }
+
+    private void clearTracer() {
+        if (CoreCommand.corePositions.size() < 2)
+            return;
+        List<BlockPos> availableCores = CoreCommand.corePositions.subList(1, CoreCommand.corePositions.size());
+
+        List<String> emptyCommands = new ArrayList<>();
+        for (int i = 0; i < availableCores.size(); i++) {
+            emptyCommands.add("");
+        }
+        // Clear them
+        CoreUpdater.startAuto(availableCores, emptyCommands, false, false, 50);
+        CoreUpdater.onTick();
     }
 
     private void releaseTarget() {
@@ -130,6 +230,35 @@ public class ForceGrab extends Module {
                     false));
         }
         target = null;
+        clearTracer();
+    }
+
+    private void throwTarget() {
+        if (target == null || coreBlockPos == null)
+            return;
+
+        Vec3d lookVec = mc.player.getRotationVec(1.0F);
+        Vec3d velocity = lookVec.multiply(throwForce.get());
+
+        // command: data modify entity <uuid> Motion set value [x, y, z]
+        String cmd = String.format(Locale.US, "data modify entity %s Motion set value [%.2f, %.2f, %.2f]",
+                target.getUuidAsString(),
+                velocity.x,
+                velocity.y,
+                velocity.z);
+
+        // Send as impulse to apply immediately
+        mc.player.networkHandler.sendPacket(new UpdateCommandBlockC2SPacket(
+                coreBlockPos,
+                cmd,
+                CommandBlockBlockEntity.Type.REDSTONE, // Impulse
+                false,
+                false,
+                true // Always Active
+        ));
+
+        ChatUtils.info("Threw " + target.getName().getString());
+        releaseTarget();
     }
 
     private void handleGrabInput() {
