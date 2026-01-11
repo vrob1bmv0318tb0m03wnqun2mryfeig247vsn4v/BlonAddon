@@ -57,11 +57,6 @@ Places Litematica schematics using command blocks via the command block core sys
 
 ## Building from Source
 
-```bash
-./gradlew build
-```
-
-The built JAR will be in `build/libs/`.
 
 ## Dependencies
 
