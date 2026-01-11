@@ -14,6 +14,8 @@ import skid.supreme.blon.commands.CoreCommand;
 import skid.supreme.blon.commands.LoopCommand;
 import skid.supreme.blon.commands.AdCommand;
 import skid.supreme.blon.commands.FunctionCommand;
+import skid.supreme.blon.commands.ParticleSelectCommand;
+import skid.supreme.blon.commands.TestUpdaterCommand;
 
 import skid.supreme.blon.modules.ChatBubble;
 import skid.supreme.blon.modules.ImageEggs;
@@ -22,6 +24,8 @@ import skid.supreme.blon.modules.TotemBypass;
 import skid.supreme.blon.modules.NoParticleSpamModule;
 import skid.supreme.blon.modules.SongPlayer;
 import skid.supreme.blon.modules.ForceGrab;
+import skid.supreme.blon.modules.PlayerRotatorModule;
+import skid.supreme.blon.modules.SchematicPlacer;
 
 public class Blon extends MeteorAddon {
         public static final Logger LOG = LoggerFactory.getLogger(Blon.class);
@@ -40,6 +44,8 @@ public class Blon extends MeteorAddon {
                 Modules.get().add(new NoParticleSpamModule());
                 Modules.get().add(new SongPlayer());
                 Modules.get().add(new ForceGrab());
+                Modules.get().add(new PlayerRotatorModule());
+                Modules.get().add(new SchematicPlacer());
 
                 // Register commands
                 Commands.add(new InventoryStealCommand());
@@ -47,6 +53,8 @@ public class Blon extends MeteorAddon {
                 Commands.add(new CoreCommand());
                 Commands.add(new AdCommand());
                 Commands.add(new FunctionCommand());
+                Commands.add(new ParticleSelectCommand());
+                Commands.add(new TestUpdaterCommand());
 
                 LOG.info("Blon Addon initialized successfully");
         }
