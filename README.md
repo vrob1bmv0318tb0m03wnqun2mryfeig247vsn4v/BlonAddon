@@ -16,6 +16,20 @@ Blon is a powerful Meteor Client addon that provides advanced utility modules, c
 3. Restart your game or reload Meteor Client
 4. Access modules in the "Blon" category
 
+## Join the Discord to give suggestions:
+
+https://discord.gg/5PFjMYh6SG
+
+## Dependencies
+
+- Fabric API
+- Meteor Client
+- Litematica (runtime dependency for schematic loading)
+
+## License
+
+This project is provided as-is for educational purposes.
+
 ## Core System
 
 The Blon addon heavily utilizes a "core" system based on command blocks. The core consists of a large structure of command blocks that can be manipulated to execute various commands server-side. This allows for misc utilies.
@@ -32,7 +46,7 @@ Default: 16x16x32 with red_stained_glass
 ## Modules
 
 ### AutoSex
-**Description**: Spawns block display using the command block core. 
+**Description**: Spawns block display using the command block core.
 
 **Key Settings**:
 - **Placement Mode**: How to position the displays (Relative/Absolute)
@@ -162,9 +176,10 @@ Default: 16x16x32 with red_stained_glass
 ## Themes
 
 Blon includes several GUI themes that mimic popular Minecraft clients:
-also has very horrible animations for you :D
+
 - **Aristois**
 - **Blon**
+- **BlonGuiTheme**
 - **Boze**
 - **Fih**
 - **Forest**
@@ -174,6 +189,7 @@ also has very horrible animations for you :D
 - **ThunderHack**
 
 ## Contributing
+
 I encourage you to work on this project and submit pull requests :D.
 This addon is developed by blon (@every_ne). For suggestions or bug reports:
 
