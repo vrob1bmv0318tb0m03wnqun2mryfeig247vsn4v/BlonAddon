@@ -181,7 +181,7 @@ Blon includes several GUI themes that mimic popular Minecraft clients:
 - **Blon**
 - **BlonGuiTheme**
 - **Boze**
-- **Fih**
+- **Fih (w fih client)**
 - **Forest**
 - **GlossyPurple**
 - **Mercury**
