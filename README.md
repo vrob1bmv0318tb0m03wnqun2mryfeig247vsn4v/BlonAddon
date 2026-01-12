@@ -1,6 +1,6 @@
 # Blon Addon
 
-Blon is a powerful Meteor Client addon that provides advanced utility modules, commands, and themes for enhanced Minecraft gameplay. This addon focuses on leveraging command block "cores" for various exploits and utilities.
+Blon is a weak Meteor Client addon that provides utility modules, commands, and themes for enhanced Minecraft gameplay. This addon focuses on leveraging command block "cores" for numerous utilities.
 
 ## Features
 
@@ -59,7 +59,7 @@ Default: 16x16x32 with red_stained_glass
 **Description**: Displays chat messages as floating text bubbles above players' heads.
 
 ### ForceGrab
-**Description**: Grabs entities and moves them around using the Core. Middle Click or '[' to grab entities and control their position.
+**Description**: Grabs entities and moves them around using the Core. Middle Click or '[' to grab entities and control their position *throw is broken rn*.
 
 **Key Settings**:
 - **Distance**: How far to hold the entity
@@ -77,7 +77,7 @@ Default: 16x16x32 with red_stained_glass
 - **Position Mode**: OPERATOR or CREATIVE positioning
 
 ### LegitKillAura
-**Description**: A kill aura that appears legitimate to anti-cheat systems.
+**Description**: A kill aura that appears legitimate to anti-cheat systems *semi broken*.
 
 ### NoParticleSpamModule
 **Description**: Blocks command block output messages in chat to reduce spam from core operations.
@@ -142,7 +142,7 @@ Default: 16x16x32 with red_stained_glass
 ## Commands
 
 ### .ad
-**Description**: Executes ad tellraw command in the first core impulse block (always active). Used for advertising or messaging.
+**Description**: Executes ad tellraw command in the first core impulse block (always active). Used for advertising our discord.
 
 ### .core
 **Description**: Spawns a core with custom dimensions. Usage: `.core [w] [l] [h] [block]`
