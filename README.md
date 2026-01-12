@@ -1,69 +1,182 @@
-# BlonAddon
+# Blon Addon
 
-A Fabric mod for Meteor Client that adds powerful command block utilities.
+Blon is a powerful Meteor Client addon that provides advanced utility modules, commands, and themes for enhanced Minecraft gameplay. This addon focuses on leveraging command block "cores" for various exploits and utilities.
 
 ## Features
 
-### SchematicPlacer Module
-Places Litematica schematics using command blocks via the command block core system.
-
-**Recent Fixes:**
-- **Fixed Structure Placement**: Replaced volume optimization with individual `setblock` commands to ensure exact schematic structure preservation (including holes and complex shapes)
-- **Fixed Invalid Packet Kicks**: Implemented proper block state string generation using Minecraft registry methods instead of unreliable string manipulation
-- **Added Region Origin Support**: Now correctly handles schematic region origins for accurate positioning
-
-**Usage:**
-1. Create a command block core: `.core` (default 16x16x32)
-2. Place your `.litematica` schematic file in `.minecraft/schematics/`
-3. Enable SchematicPlacer module and set the schematic file name (without extension)
-4. Adjust placement mode and offset as needed
-5. The module will generate individual setblock commands sent via your command block core
-
-**Settings:**
-- `schematic-file`: Name of the schematic file (without .litematica extension)
-- `placement-mode`: Relative (to player position) or Absolute (world origin)
-- `placement-offset`: Additional offset from placement position
-- `packets-per-tick`: Number of commands to send per tick (default: 50000, reduce if experiencing issues)
-- `core-mode`: Command block execution mode
-- `ignore-air`: Skip air blocks (recommended)
-- `place-waterlogged`: Include waterlogged blocks
-
-### Command Block Core System
-- **CoreCommand (.core)**: Creates a 3D grid of command blocks for high-throughput command execution
-- **CoreUpdater**: Distributes commands across all command blocks in the core
-- **Multiple Modes**: AUTO, REDSTONE, SEQUENCE, SINGLE execution modes
-
-### Other Modules
-- ChatBubble: Custom chat display
-- ForceGrab: Enhanced entity grabbing
-- ImageEggs: Image display using spawn eggs
-- LegitKillAura: Legitimate kill aura
-- NoParticleSpam: Reduces particle spam
-- ParticleAuraModule: Particle-based aura effects
-- PlayerRotatorModule: Player rotation utilities
-- SongPlayer: Audio playback
-- TotemBypass: Totem bypass utilities
-
-### Commands
-- `.core [width] [length] [height]`: Create command block core (default 16x16x32)
-- `.core decore`: Remove command block core
-- `.core refresh`: Refresh command block core
+- **11 Utility Modules**: From particle auras to schematic placers
+- **8 Custom Commands**: For core management and automation
+- **10 GUI Themes**: Including misc client themes
+- **Core System**: Advanced command block manipulation for utilities
 
 ## Installation
 
-1. Install Fabric Loader and Meteor Client
-2. Place the mod JAR in your `.minecraft/mods/` folder
-3. Launch Minecraft
+1. Download the latest release JAR file
+2. Place it in your `mods` folder
+3. Restart your game or reload Meteor Client
+4. Access modules in the "Blon" category
 
-## Building from Source
+## Core System
 
+The Blon addon heavily utilizes a "core" system based on command blocks. The core consists of a large structure of command blocks that can be manipulated to execute various commands server-side. This allows for misc utilies.
 
-## Dependencies
+### Setting up the Core
 
-- Fabric API
-- Meteor Client
-- Litematica (runtime dependency for schematic loading)
+Use the `.core` command to spawn a core:
+```
+.core [width] [length] [height] [block]
+```
 
-## License
+Default: 16x16x32 with red_stained_glass
 
-This project is provided as-is for educational purposes.
+## Modules
+
+### AutoSex
+**Description**: Spawns block display using the command block core. 
+
+**Key Settings**:
+- **Placement Mode**: How to position the displays (Relative/Absolute)
+- **Placement Offset**: Offset from base position
+- **Player Name**: Name of player to teleport (for smooth movement)
+- **Teleport Offsets**: X/Y/Z offsets for teleport position
+- **Teleport Speed**: Speed of up/down movement
+
+### ChatBubble
+**Description**: Displays chat messages as floating text bubbles above players' heads.
+
+### ForceGrab
+**Description**: Grabs entities and moves them around using the Core. Middle Click or '[' to grab entities and control their position.
+
+**Key Settings**:
+- **Distance**: How far to hold the entity
+- **Tracer**: Draw particle line to target
+- **Particle Type**: Type of particle for tracer
+- **Throw Force**: Force when throwing grabbed entity
+
+### ImageEggs
+**Description**: Spawns images using text_display spawn eggs. Creates visual displays of images or text in the world.
+
+**Key Settings**:
+- **Render Mode**: Normal or overlapping text display
+- **Billboard Mode**: How text is oriented (center, etc.)
+- **Overlap Factor**: Fraction of line width to overlap
+- **Position Mode**: OPERATOR or CREATIVE positioning
+
+### LegitKillAura
+**Description**: A kill aura that appears legitimate to anti-cheat systems.
+
+### NoParticleSpamModule
+**Description**: Blocks command block output messages in chat to reduce spam from core operations.
+
+### ParticleAuraModule
+**Description**: Geometric particle aura using the core. Creates various 3D shapes made of particles around the player.
+
+**Key Settings**:
+- **Particle Style**: Shape type (Cube, Sphere, etc.)
+- **Particle Type**: Particle effect to use
+- **Max Packets Per Tick**: Rate limiting
+- **Rotation Speeds**: X/Y/Z axis rotation speeds
+- **Quality**: Particle density multiplier
+- **Radius**: Size of the shape
+- **Translate/Rotate**: Position and orientation offsets
+
+### PlayerRotatorModule
+**Description**: Rotates players around you using the Core. Forces nearby players to orbit around your position.
+
+**Key Settings**:
+- **Max Players**: Maximum number of players to rotate
+- **Radius**: Rotation radius
+- **Speed**: Rotation speed
+
+### SchematicPlacer
+**Description**: Places schematics using the command block core. Loads and places large structures from schematic files.
+
+**Key Settings**:
+- **Schematic File**: Name of schematic file (without extension)
+- **Placement Mode**: How to position the schematic
+- **Placement Offset**: Offset from placement position
+- **Packets Per Tick**: Commands per tick
+- **Core Mode**: Command block execution mode
+- **Ignore Air**: Don't place air blocks
+- **Use Volume Optimization**: Use fill commands for performance
+
+### SongPlayer
+**Description**: Plays music datapacks through the core. Allows playing custom music tracks using Minecraft's function system.
+
+**Key Settings**:
+- **Datapack File**: Name of zip datapack file
+- **Start Function**: Function to start playback
+- **Volume**: Volume multiplier
+- **Packets Per Tick**: Rate limiting
+- **Batch Size**: Commands per batch
+- **Show Progress**: Display playback progress
+- **Auto Schedule**: Follow schedule commands
+
+### TotemBypass
+**Description**: Bypasses totem protection using various methods including mace exploits. Allows killing players even when they have totem of undying.
+
+**Key Settings**:
+- **Weapon**: Weapon type (Mace)
+- **Server Type**: Paper or Vanilla positioning
+- **Fall Height**: Simulated fall height for power
+- **Min/Max Height**: Height range for calculations
+- **Delay Ticks**: Delay between packets
+- **Check Obstacles**: Verify clear path before teleport
+- **Attack Count**: Number of attacks per interaction
+- **Auto Swap Back**: Return to previous item
+
+## Commands
+
+### .ad
+**Description**: Executes ad tellraw command in the first core impulse block (always active). Used for advertising or messaging.
+
+### .core
+**Description**: Spawns a core with custom dimensions. Usage: `.core [w] [l] [h] [block]`
+
+**Parameters**:
+- `w`: Width (default: 16)
+- `l`: Length (default: 16)
+- `h`: Height (default: 32)
+- `block`: Block type (default: red_stained_glass)
+
+### .function
+**Description**: Controls the MCFunction player. Aliases: func, play
+
+### .k
+**Description**: Kills all entities except players.
+
+### .loop
+**Description**: Creates command loops for repeated execution.
+
+### .particle-select
+**Description**: Selects a particle type for use with ParticleAura module.
+
+### .steal-inventory
+**Description**: Steals items from containers or players.
+
+### .testupdater
+**Description**: Tests sending command block update packets using CoreUpdater methods.
+
+**Usage**: `.testupdater <mode> <command>`
+
+## Themes
+
+Blon includes several GUI themes that mimic popular Minecraft clients:
+also has very horrible animations for you :D
+- **Aristois**
+- **Blon**
+- **Boze**
+- **Fih**
+- **Forest**
+- **GlossyPurple**
+- **Mercury**
+- **Sigma**
+- **ThunderHack**
+
+## Contributing
+I encourage you to work on this project and submit pull requests :D.
+This addon is developed by blon (@every_ne). For suggestions or bug reports:
+
+## Join the Discord for suggestions:
+
+https://discord.gg/5PFjMYh6SG
