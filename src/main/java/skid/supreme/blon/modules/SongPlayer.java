@@ -28,10 +28,6 @@ public class SongPlayer extends Module {
             .onChanged(v -> {
                 if (v) {
                     showInfo();
-                    // We can't auto-reset 'info' here easily without self-reference issues during
-                    // init.
-                    // Users will just have to toggle it off and on again.
-                    // Or we could run a task to reset it, but simple is better.
                 }
             })
             .build());

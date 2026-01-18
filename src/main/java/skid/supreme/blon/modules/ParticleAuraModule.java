@@ -1,5 +1,8 @@
 package skid.supreme.blon.modules;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import meteordevelopment.meteorclient.events.meteor.MouseScrollEvent;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.gui.GuiTheme;
@@ -7,7 +10,13 @@ import meteordevelopment.meteorclient.gui.widgets.WWidget;
 import meteordevelopment.meteorclient.gui.widgets.containers.WHorizontalList;
 import meteordevelopment.meteorclient.gui.widgets.containers.WVerticalList;
 import meteordevelopment.meteorclient.gui.widgets.pressable.WCheckbox;
-import meteordevelopment.meteorclient.settings.*;
+import meteordevelopment.meteorclient.settings.BoolSetting;
+import meteordevelopment.meteorclient.settings.DoubleSetting;
+import meteordevelopment.meteorclient.settings.EnumSetting;
+import meteordevelopment.meteorclient.settings.IntSetting;
+import meteordevelopment.meteorclient.settings.Setting;
+import meteordevelopment.meteorclient.settings.SettingGroup;
+import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
 import net.minecraft.util.math.BlockPos;
@@ -15,9 +24,6 @@ import net.minecraft.util.math.Vec3d;
 import skid.supreme.blon.Blon;
 import skid.supreme.blon.commands.CoreCommand;
 import skid.supreme.blon.core.CoreUpdater;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class ParticleAuraModule extends Module {
 
@@ -741,10 +747,6 @@ public class ParticleAuraModule extends Module {
                     for (int j = -1; j <= 1; j += 2)
                         verts.add(new Vec3d(i * phi, j * invPhi, 0).multiply(s));
 
-                // Find edges (distance = 2/phi * s approx? No, edge length is constant in
-                // dodecahedron)
-                // Edge length in this coord system (cube edge 2) is 2/phi = 1.236
-                // Let's brute force connections based on distance
                 double edgeLen = 2.0 / phi * s;
                 double tolerance = 0.1 * s;
 
@@ -1106,8 +1108,6 @@ public class ParticleAuraModule extends Module {
                         // Edge len is 2 for (0,1,phi) construction?
                         // Check dist: (0,1,phi) to (0,-1,phi) = 2. Correct.
                         // (0,1,phi) to (phi,0,1)? sqrt(phi^2 + 1 + (phi-1)^2) ?
-                        // phi ~ 1.618.
-                        // This construct ensures edge len = 2.
                         if (Math.abs(ico.get(i).distanceTo(ico.get(j)) - 2.0) < 0.1) {
                             Vec3d p1 = ico.get(i);
                             Vec3d p2 = ico.get(j);

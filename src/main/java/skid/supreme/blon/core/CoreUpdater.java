@@ -1,5 +1,6 @@
 package skid.supreme.blon.core;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import meteordevelopment.meteorclient.MeteorClient;
@@ -11,165 +12,243 @@ import net.minecraft.util.math.BlockPos;
 
 public class CoreUpdater {
 
-    private static List<BlockPos> positions;
-    private static int positionIndex;
-    private static int delayTicks;
+    private static List<BlockPos> positions = new ArrayList<>();
+    private static List<String> commands = new ArrayList<>();
 
-    private static String command;
-    private static List<String> commands;
-    private static int currentCommandIndex;
-    private static Mode mode;
+    private static Mode mode = Mode.AUTO;
     private static boolean conditional;
     private static boolean trackOutput;
     private static int packetsPerTick = 1;
+    private static int delayTicks = 0;
 
-    /* ================= ENUM ================= */
+    private static int positionIndex = 0;
+    private static int commandIndex = 0;
+    private static boolean isRunning = false;
 
-    public enum Mode {
-        AUTO, // repeating
-        REDSTONE, // impulse
-        SEQUENCE, // chain
-        SINGLE // single tick impulse
+    private enum SinglePhase {
+        EXECUTE,
+        CLEANUP
     }
 
-    /* ================= IMMEDIATE SEND METHODS ================= */
+    private static class SingleTask {
+        BlockPos pos;
+        String command;
+        SinglePhase phase = SinglePhase.EXECUTE;
+        int delay = 0;
+
+        SingleTask(BlockPos pos, String command) {
+            this.pos = pos;
+            this.command = command;
+        }
+    }
+
+    private static final List<SingleTask> singleQueue = new ArrayList<>();
+
+    public enum Mode {
+        AUTO,
+
+        REDSTONE,
+
+        SEQUENCE,
+
+        SINGLE
+
+    }
 
     public static void sendCommandsImmediately(
-            List<BlockPos> positions,
-            List<String> cmds,
+            List<BlockPos> posList,
+            List<String> cmdList,
             Mode mode,
             boolean conditional,
             boolean trackOutput) {
-        if (cmds == null || cmds.isEmpty() || positions == null || positions.isEmpty())
+
+        if (invalidEnv() || posList == null || posList.isEmpty() || cmdList == null || cmdList.isEmpty())
             return;
 
-        if (MeteorClient.mc.player == null || MeteorClient.mc.world == null)
-            return;
-
-        // Temporarily set static fields for sendPacket() method
-        CoreUpdater.mode = mode;
-        CoreUpdater.conditional = conditional;
         CoreUpdater.trackOutput = trackOutput;
+        CoreUpdater.conditional = conditional;
+        CoreUpdater.mode = mode;
 
-        int cmdIndex = 0;
-        for (BlockPos pos : positions) {
+        int localCmdIndex = 0;
+
+        for (BlockPos pos : posList) {
             if (!isCommandBlock(pos))
                 continue;
 
-            String cmd = cmds.get(cmdIndex % cmds.size());
+            String cmd = cmdList.get(localCmdIndex % cmdList.size());
+
             if (mode == Mode.SINGLE) {
+
+                sendPacket(pos, "/", CommandBlockBlockEntity.Type.REDSTONE, false);
                 sendPacket(pos, cmd, CommandBlockBlockEntity.Type.REDSTONE, true);
-                sendPacket(pos, cmd, CommandBlockBlockEntity.Type.REDSTONE, false);
-            } else {
-                sendPacket(pos, cmd);
+                sendPacket(pos, "/", CommandBlockBlockEntity.Type.REDSTONE, false);
+
+                localCmdIndex++;
             }
-            cmdIndex++;
         }
     }
 
-    /* ================= START METHODS ================= */
-
-    public static void startAuto(
-            List<BlockPos> positions,
-            List<String> cmds,
-            boolean conditional,
-            boolean trackOutput,
-            int ppt) {
-        start(positions, cmds, Mode.AUTO, conditional, trackOutput, ppt);
+    public static void startAuto(List<BlockPos> p, List<String> c, boolean cond, boolean track, int ppt) {
+        start(p, c, Mode.AUTO, cond, track, ppt);
     }
 
-    public static void startRedstone(
-            List<BlockPos> positions,
-            List<String> cmds,
-            boolean conditional,
-            boolean trackOutput,
-            int ppt) {
-        start(positions, cmds, Mode.REDSTONE, conditional, trackOutput, ppt);
+    public static void startRedstone(List<BlockPos> p, List<String> c, boolean cond, boolean track, int ppt) {
+        start(p, c, Mode.REDSTONE, cond, track, ppt);
     }
 
-    public static void startSequence(
-            List<BlockPos> positions,
-            List<String> cmds,
-            boolean conditional,
-            boolean trackOutput,
-            int ppt) {
-        start(positions, cmds, Mode.SEQUENCE, conditional, trackOutput, ppt);
+    public static void startSequence(List<BlockPos> p, List<String> c, boolean cond, boolean track, int ppt) {
+        start(p, c, Mode.SEQUENCE, cond, track, ppt);
     }
 
-    public static void startSingle(
-            List<BlockPos> positions,
-            List<String> cmds,
-            boolean conditional,
-            boolean trackOutput,
-            int ppt) {
-        start(positions, cmds, Mode.SINGLE, conditional, trackOutput, ppt);
-    }
+    public static void startSingle(List<BlockPos> p, List<String> c, boolean cond, boolean track, int ppt) {
+        if (p == null || p.isEmpty() || c == null || c.isEmpty()) {
+            isRunning = false;
+            return;
+        }
 
-    /* ================= INTERNAL START ================= */
+        startSingleInternal(p, c);
+
+        mode = Mode.SINGLE;
+        conditional = cond;
+        trackOutput = track;
+        packetsPerTick = Math.max(1, ppt);
+        delayTicks = 0;
+    }
 
     private static void start(
-            List<BlockPos> positions,
-            List<String> cmds,
-            Mode mode,
-            boolean conditional,
-            boolean trackOutput,
+            List<BlockPos> p,
+            List<String> c,
+            Mode m,
+            boolean cond,
+            boolean track,
             int ppt) {
-        if (cmds == null || cmds.isEmpty())
+
+        if (p == null || p.isEmpty() || c == null || c.isEmpty()) {
+            isRunning = false;
             return;
-
-        CoreUpdater.positions = new java.util.ArrayList<>(positions);
-        CoreUpdater.positionIndex = 0;
-        CoreUpdater.mode = mode;
-        CoreUpdater.conditional = conditional;
-        CoreUpdater.trackOutput = trackOutput;
-        CoreUpdater.packetsPerTick = Math.max(1, ppt);
-        CoreUpdater.currentCommandIndex = 0;
-
-        if (cmds.size() == 1) {
-            CoreUpdater.command = cmds.get(0);
-            CoreUpdater.commands = null;
-        } else {
-            CoreUpdater.commands = new java.util.ArrayList<>(cmds);
-            CoreUpdater.command = null;
         }
 
-        // allow server to finish /fill + tile creation
-        CoreUpdater.delayTicks = 0;
+        positions = new ArrayList<>(p);
+        commands = new ArrayList<>(c);
+
+        mode = m;
+        conditional = cond;
+        trackOutput = track;
+        packetsPerTick = Math.max(1, ppt);
+
+        positionIndex = 0;
+        commandIndex = 0;
+        delayTicks = 0;
+        isRunning = true;
     }
 
-    /* ================= TICK ================= */
+    private static void startSingleInternal(List<BlockPos> p, List<String> c) {
+
+        for (SingleTask task : singleQueue) {
+            sendPacket(task.pos, "", CommandBlockBlockEntity.Type.REDSTONE, false);
+        }
+
+        singleQueue.clear();
+
+        int blockIndex = 0;
+        for (String cmd : c) {
+            BlockPos pos = p.get(blockIndex % p.size());
+            if (isCommandBlock(pos)) {
+                singleQueue.add(new SingleTask(pos, cmd));
+            }
+            blockIndex++;
+        }
+
+        isRunning = !singleQueue.isEmpty();
+    }
+
+    public static void stop() {
+        isRunning = false;
+        positions.clear();
+        commands.clear();
+        singleQueue.clear();
+    }
 
     public static void onTick() {
-        if (MeteorClient.mc.player == null || MeteorClient.mc.world == null)
-            return;
+        if (!isRunning || invalidEnv()) return;
 
-        if (delayTicks > 0) {
-            delayTicks--;
+        if (mode != Mode.SINGLE) {
+
+            if (delayTicks > 0) {
+                delayTicks--;
+                return;
+            }
+
+            if (positions.isEmpty()) {
+                isRunning = false;
+                return;
+            }
+
+            for (int i = 0; i < packetsPerTick; i++) {
+                if (positionIndex >= positions.size())
+                    positionIndex = 0;
+                if (commandIndex >= commands.size()) {
+                    commandIndex = 0;
+                }
+
+                BlockPos pos = positions.get(positionIndex);
+
+                if (!isCommandBlock(pos)) {
+                    positionIndex++;
+                    continue;
+                }
+
+                String cmd = commands.get(commandIndex);
+                sendPacket(pos, cmd);
+
+                positionIndex++;
+                commandIndex++;
+            }
             return;
         }
 
-        if (positions == null)
-            return;
+        int sent = 0;
+        int i = 0;
+        while (i < singleQueue.size() && sent < packetsPerTick) {
+            SingleTask task = singleQueue.get(i);
+            boolean incremented = false;
+            if (task.phase == SinglePhase.EXECUTE) {
+                sendPacket(
+                    task.pos,
+                    task.command,
+                    CommandBlockBlockEntity.Type.REDSTONE,
+                    true
+                );
+                task.phase = SinglePhase.CLEANUP;
+                task.delay = 2;
+                sent++;
+                incremented = true;
+            } else if (task.phase == SinglePhase.CLEANUP) {
+                if (task.delay == 0) {
+                    sendPacket(
+                        task.pos,
+                        "", 
 
-        for (int i = 0; i < packetsPerTick; i++) {
-            if (positionIndex >= positions.size())
-                return;
-
-            BlockPos pos = positions.get(positionIndex++);
-            if (!isCommandBlock(pos))
-                continue;
-
-            String cmd = commands != null ? commands.get(currentCommandIndex++) : command;
-            if (mode == Mode.SINGLE) {
-                sendPacket(pos, cmd, CommandBlockBlockEntity.Type.REDSTONE, true);
-                sendPacket(pos, cmd, CommandBlockBlockEntity.Type.REDSTONE, false);
-            } else {
-                sendPacket(pos, cmd);
+                        CommandBlockBlockEntity.Type.REDSTONE,
+                        false
+                    );
+                    singleQueue.remove(i);
+                    sent++;
+                    incremented = false;
+                } else {
+                    task.delay--;
+                    incremented = true;
+                }
+            }
+            if (incremented) {
+                i++;
             }
         }
-    }
 
-    /* ================= PACKET ================= */
+        if (singleQueue.isEmpty()) {
+            isRunning = false;
+        }
+    }
 
     private static void sendPacket(BlockPos pos, String cmd) {
         CommandBlockBlockEntity.Type type;
@@ -186,13 +265,13 @@ public class CoreUpdater {
             }
             case SEQUENCE -> {
                 type = CommandBlockBlockEntity.Type.SEQUENCE;
-                alwaysActive = false; // REQUIRED
-            }
-            case SINGLE -> {
-                return; // handled specially in onTick
+
+                alwaysActive = true;
             }
             default -> {
-                return;
+
+                type = CommandBlockBlockEntity.Type.REDSTONE;
+                alwaysActive = false;
             }
         }
 
@@ -200,6 +279,9 @@ public class CoreUpdater {
     }
 
     private static void sendPacket(BlockPos pos, String cmd, CommandBlockBlockEntity.Type type, boolean alwaysActive) {
+        if (MeteorClient.mc.player == null)
+            return;
+
         MeteorClient.mc.player.networkHandler.sendPacket(
                 new UpdateCommandBlockC2SPacket(
                         pos,
@@ -210,12 +292,37 @@ public class CoreUpdater {
                         alwaysActive));
     }
 
-    /* ================= VALIDATION ================= */
+    public static boolean isRunning() {
+        return isRunning;
+    }
+
+    public static boolean isSingleRunning() {
+        return isRunning && mode == Mode.SINGLE;
+    }
+
+    public static void sendCommandToBlock(BlockPos pos, String cmd) {
+        if (!isCommandBlock(pos))
+            return;
+
+        sendPacket(pos, cmd, CommandBlockBlockEntity.Type.AUTO, true);
+    }
 
     private static boolean isCommandBlock(BlockPos pos) {
+        if (invalidEnv())
+            return false;
+
+        if (!MeteorClient.mc.world.getChunkManager().isChunkLoaded(pos.getX() >> 4, pos.getZ() >> 4)) {
+            return false;
+        }
+
         Block block = MeteorClient.mc.world.getBlockState(pos).getBlock();
         return block == Blocks.COMMAND_BLOCK
                 || block == Blocks.REPEATING_COMMAND_BLOCK
                 || block == Blocks.CHAIN_COMMAND_BLOCK;
     }
+
+    private static boolean invalidEnv() {
+        return MeteorClient.mc.player == null || MeteorClient.mc.world == null;
+    }
 }
+

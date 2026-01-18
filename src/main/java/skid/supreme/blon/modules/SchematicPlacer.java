@@ -1,16 +1,13 @@
 package skid.supreme.blon.modules;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 
-import it.unimi.dsi.fastutil.longs.LongArrayList;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BlockPosSetting;
 import meteordevelopment.meteorclient.settings.BoolSetting;
@@ -21,9 +18,9 @@ import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.settings.StringSetting;
 import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.orbit.EventHandler;
+import net.minecraft.block.BlockState;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3i;
-import net.minecraft.block.BlockState;
 import skid.supreme.blon.Blon;
 import skid.supreme.blon.commands.CoreCommand;
 import skid.supreme.blon.core.CoreUpdater;
@@ -57,12 +54,14 @@ public class SchematicPlacer extends Module {
             .defaultValue(50)
             .min(1)
             .max(100000)
+            .sliderMin(1)
+            .sliderMax(50000)
             .build());
 
     private final Setting<CoreUpdater.Mode> coreMode = sgCore.add(new EnumSetting.Builder<CoreUpdater.Mode>()
             .name("core-mode")
             .description("Command block execution mode")
-            .defaultValue(CoreUpdater.Mode.SINGLE)
+            .defaultValue(CoreUpdater.Mode.AUTO)
             .build());
 
     private final Setting<Boolean> ignoreAir = sgPlacement.add(new BoolSetting.Builder()
@@ -77,14 +76,24 @@ public class SchematicPlacer extends Module {
             .defaultValue(true)
             .build());
 
+    private final Setting<Boolean> useVolumeOptimization = sgPlacement.add(new BoolSetting.Builder()
+            .name("use-volume-optimization")
+            .description("Use fill commands instead of setblock for better performance")
+            .defaultValue(true)
+            .build());
+
+    private final Setting<Integer> minFillSize = sgPlacement.add(new IntSetting.Builder()
+            .name("min-fill-size")
+            .description("Minimum size for fill commands (blocks)")
+            .defaultValue(8)
+            .min(2)
+            .max(64)
+            .build());
+
     private SchematicData currentSchematic;
     private List<String> placementCommands;
     private boolean isPlacing;
-    private int commandIndex;
-
-    // Volume optimization data
-    private int[][][] workArr;
-    private LongArrayList fillVolumes;
+    private int expectedTicks;
 
     public SchematicPlacer() {
         super(Blon.Main, "SchematicPlacer", "Places schematics using the command block core");
@@ -111,6 +120,26 @@ public class SchematicPlacer extends Module {
             return;
         }
 
+        // Check schematic size limits to prevent memory issues
+        long totalBlocks = (long) currentSchematic.width * currentSchematic.height * currentSchematic.length;
+        if (totalBlocks > 16_777_216) { // 4096^3 max reasonable size
+            error("Schematic too large: " + totalBlocks + " blocks (max 16M)");
+            toggle();
+            return;
+        }
+
+        // Estimate memory usage for work arrays (conservative estimate)
+        long estimatedMemoryMB = totalBlocks * 4L / (1024 * 1024); // 4 bytes per int
+        if (estimatedMemoryMB > 512) { // Limit to 512MB for work arrays
+            error("Schematic requires too much memory: ~" + estimatedMemoryMB + "MB");
+            toggle();
+            return;
+        }
+
+        // Debug spawn position
+        BlockPos firstBlock = getPlacementPosition();
+        info("Schematic will start at world position: " + firstBlock);
+
         generatePlacementCommands();
         if (placementCommands.isEmpty()) {
             error("No blocks to place in schematic");
@@ -118,8 +147,24 @@ public class SchematicPlacer extends Module {
             return;
         }
 
+        // If volume optimization generated too many commands, fall back to setblock
+        if (useVolumeOptimization.get() && placementCommands.size() > totalBlocks * 0.8) {
+            warning("Volume optimization ineffective, falling back to setblock commands");
+            // Regenerate with setblock
+            placementCommands.clear();
+            generateSetblockCommands(getPlacementPosition());
+        }
+
+        // Check command count for reasonableness
+        if (placementCommands.size() > 500000) {
+            warning("Large number of commands generated: " + placementCommands.size());
+        }
+
         startPlacement();
         info("Starting schematic placement: " + placementCommands.size() + " commands");
+
+        // Send all commands using CoreUpdater.startAuto like other modules
+        CoreUpdater.startAuto(CoreCommand.corePositions, placementCommands, false, true, packetsPerTick.get());
     }
 
     @Override
@@ -127,26 +172,23 @@ public class SchematicPlacer extends Module {
         isPlacing = false;
         currentSchematic = null;
         placementCommands = null;
-        commandIndex = 0;
+        expectedTicks = 0;
         CoreUpdater.onTick(); // Clear any pending updates
     }
 
     @EventHandler
     private void onTick(TickEvent.Post event) {
-        if (!isPlacing || placementCommands == null) return;
+        if (!isPlacing) return;
 
-        if (commandIndex >= placementCommands.size()) {
-            info("Schematic placement completed");
-            toggle();
-            return;
+        if (expectedTicks > 0 || coreMode.get() == CoreUpdater.Mode.AUTO) {
+            CoreUpdater.onTick();
+            if (coreMode.get() != CoreUpdater.Mode.AUTO) expectedTicks--;
         }
 
-        // Send next batch of commands immediately
-        int endIndex = Math.min(commandIndex + packetsPerTick.get(), placementCommands.size());
-        List<String> batch = placementCommands.subList(commandIndex, endIndex);
-
-        CoreUpdater.sendCommandsImmediately(CoreCommand.corePositions, batch, coreMode.get(), false, false);
-        commandIndex = endIndex;
+        if (expectedTicks <= 0 && coreMode.get() != CoreUpdater.Mode.AUTO) {
+            info("Schematic placement completed");
+            toggle();
+        }
     }
 
     private void loadSchematic() {
@@ -225,11 +267,13 @@ public class SchematicPlacer extends Module {
             Map<String, Integer> paletteMap = new HashMap<>();
             int nonAirBlocks = 0;
 
+            // Cache the get method for performance
+            java.lang.reflect.Method getMethod = container.getClass().getMethod("get", int.class, int.class, int.class);
+
             for (int x = 0; x < data.width; x++) {
                 for (int y = 0; y < data.height; y++) {
                     for (int z = 0; z < data.length; z++) {
                         // Get block state using container.get(x, y, z)
-                        java.lang.reflect.Method getMethod = container.getClass().getMethod("get", int.class, int.class, int.class);
                         BlockState state = (BlockState) getMethod.invoke(container, x, y, z);
 
                         // Get proper block state string for commands
@@ -283,8 +327,140 @@ public class SchematicPlacer extends Module {
         placementCommands = new ArrayList<>();
         BlockPos basePos = getPlacementPosition();
 
-        // Generate individual setblock commands for each non-air block
-        generateSetblockCommands(basePos);
+        if (useVolumeOptimization.get()) {
+            // Simple X-only strip optimization
+            generateOptimizedCommands(basePos);
+        } else {
+            // Generate individual setblock commands for each non-air block
+            generateSetblockCommands(basePos);
+        }
+    }
+
+    private void generateOptimizedCommands(BlockPos basePos) {
+        // Simple X-only strip detection for /fill commands
+        // Only merge along X axis for same blockstate, size >= minFillSize
+        for (int y = 0; y < currentSchematic.height; y++) {
+            for (int z = 0; z < currentSchematic.length; z++) {
+                for (int x = 0; x < currentSchematic.width; ) {
+                    int index = (y * currentSchematic.length + z) * currentSchematic.width + x;
+                    if (index >= currentSchematic.blocks.length) {
+                        x++;
+                        continue;
+                    }
+
+                    int paletteIndex = currentSchematic.blocks[index];
+                    if (paletteIndex < 0 || paletteIndex >= currentSchematic.palette.size()) {
+                        x++;
+                        continue;
+                    }
+                    String blockState = currentSchematic.palette.get(paletteIndex);
+                    if (blockState == null) {
+                        x++;
+                        continue;
+                    }
+
+                    // Skip air blocks if ignoreAir is enabled
+                    if (ignoreAir.get() && (blockState.equals("minecraft:air") || blockState.equals("minecraft:cave_air"))) {
+                        x++;
+                        continue;
+                    }
+
+                    // Skip waterlogged blocks if disabled
+                    if (!placeWaterlogged.get() && blockState.contains("waterlogged=true")) {
+                        x++;
+                        continue;
+                    }
+
+                    // Find consecutive identical blocks along X axis
+                    int stripLength = 1;
+                    for (int i = 1; i < currentSchematic.width - x; i++) {
+                        int nextIndex = (y * currentSchematic.length + z) * currentSchematic.width + (x + i);
+                        if (nextIndex >= currentSchematic.blocks.length) break;
+
+                        int nextPaletteIndex = currentSchematic.blocks[nextIndex];
+                        if (nextPaletteIndex < 0 || nextPaletteIndex >= currentSchematic.palette.size()) break;
+                        String nextBlockState = currentSchematic.palette.get(nextPaletteIndex);
+
+                        // Stop if different blockstate or problematic block
+                        if (!blockState.equals(nextBlockState)) break;
+                        if (ignoreAir.get() && (nextBlockState.equals("minecraft:air") || nextBlockState.equals("minecraft:cave_air"))) break;
+                        if (!placeWaterlogged.get() && nextBlockState.contains("waterlogged=true")) break;
+
+                        stripLength++;
+                    }
+
+                    // Decide whether to use fill or individual setblock
+                    if (stripLength >= minFillSize.get()) {
+                        // Use /fill command for the strip
+                        generateFillCommand(basePos, x, y, z, stripLength, blockState);
+                        x += stripLength; // Skip processed blocks
+                    } else {
+                        // Use individual setblock commands for small strips
+                        for (int i = 0; i < stripLength; i++) {
+                            generateSetblockCommand(basePos, x + i, y, z, blockState);
+                        }
+                        x += stripLength;
+                    }
+                }
+            }
+        }
+    }
+
+    private void generateFillCommand(BlockPos basePos, int x, int y, int z, int length, String blockState) {
+        // Calculate start and end positions (both at same Y,Z, spanning X)
+        BlockPos startPos = basePos.add(x, y, z);
+        BlockPos endPos = startPos.add(length - 1, 0, 0);
+
+        // Validate world bounds (X, Y, Z)
+        int startX = startPos.getX();
+        int endX = endPos.getX();
+        int startY = startPos.getY();
+        int endY = endPos.getY();
+        int startZ = startPos.getZ();
+        int endZ = endPos.getZ();
+        if (startX < -30000000 || startX > 30000000 || endX < -30000000 || endX > 30000000 ||
+            startY < -64 || startY > 319 || endY < -64 || endY > 319 ||
+            startZ < -30000000 || startZ > 30000000 || endZ < -30000000 || endZ > 30000000) {
+            // Fall back to individual setblocks for this strip
+            for (int i = 0; i < length; i++) {
+                generateSetblockCommand(basePos, x + i, y, z, blockState);
+            }
+            return;
+        }
+
+        String fillCommand;
+        if (ignoreAir.get()) {
+            fillCommand = String.format(Locale.ROOT, "fill %d %d %d %d %d %d %s replace air",
+                    startPos.getX(), startPos.getY(), startPos.getZ(),
+                    endPos.getX(), endPos.getY(), endPos.getZ(),
+                    blockState);
+        } else {
+            fillCommand = String.format(Locale.ROOT, "fill %d %d %d %d %d %d %s",
+                    startPos.getX(), startPos.getY(), startPos.getZ(),
+                    endPos.getX(), endPos.getY(), endPos.getZ(),
+                    blockState);
+        }
+
+        placementCommands.add(fillCommand);
+    }
+
+    private void generateSetblockCommand(BlockPos basePos, int x, int y, int z, String blockState) {
+        BlockPos worldPos = basePos.add(x, y, z);
+
+        // Validate world bounds (X, Y, Z)
+        int worldX = worldPos.getX();
+        int worldY = worldPos.getY();
+        int worldZ = worldPos.getZ();
+        if (worldX < -30000000 || worldX > 30000000 ||
+            worldY < -64 || worldY > 319 ||
+            worldZ < -30000000 || worldZ > 30000000) {
+            return; // Skip blocks outside world bounds
+        }
+
+        String setblockCommand = String.format(Locale.ROOT, "setblock %d %d %d %s",
+                worldPos.getX(), worldPos.getY(), worldPos.getZ(), blockState);
+
+        placementCommands.add(setblockCommand);
     }
 
     private void generateSetblockCommands(BlockPos basePos) {
@@ -295,6 +471,7 @@ public class SchematicPlacer extends Module {
                     if (index >= currentSchematic.blocks.length) continue;
 
                     int paletteIndex = currentSchematic.blocks[index];
+                    if (paletteIndex < 0 || paletteIndex >= currentSchematic.palette.size()) continue;
                     String blockState = currentSchematic.palette.get(paletteIndex);
                     if (blockState == null) continue;
 
@@ -308,15 +485,21 @@ public class SchematicPlacer extends Module {
                         continue;
                     }
 
-                    // Calculate world position (schematic coordinates + region origin + base position)
-                    BlockPos schematicPos = new BlockPos(x, y, z);
-                    if (currentSchematic.origin != null) {
-                        schematicPos = schematicPos.add(currentSchematic.origin);
+                    // Calculate world position (schematic coordinates + base position)
+                    BlockPos worldPos = basePos.add(x, y, z);
+
+                    // Validate world bounds (X, Y, Z)
+                    int worldX = worldPos.getX();
+                    int worldY = worldPos.getY();
+                    int worldZ = worldPos.getZ();
+                    if (worldX < -30000000 || worldX > 30000000 ||
+                        worldY < -64 || worldY > 319 ||
+                        worldZ < -30000000 || worldZ > 30000000) {
+                        continue; // Skip blocks outside world bounds
                     }
-                    BlockPos worldPos = basePos.add(schematicPos);
 
                     // Generate setblock command
-                    String setblockCommand = String.format("setblock %d %d %d %s",
+                    String setblockCommand = String.format(Locale.ROOT, "setblock %d %d %d %s",
                             worldPos.getX(), worldPos.getY(), worldPos.getZ(), blockState);
 
                     placementCommands.add(setblockCommand);
@@ -325,225 +508,36 @@ public class SchematicPlacer extends Module {
         }
     }
 
-    private void generateFillVolumes(BlockPos basePos) {
-        if (currentSchematic == null) return;
-
-        int width = currentSchematic.width;
-        int height = currentSchematic.height;
-        int length = currentSchematic.length;
-
-        // Initialize work array for the entire schematic
-        workArr = new int[width][height][length];
-        fillVolumes = new LongArrayList();
-
-        // Generate strips along the X axis (EAST direction)
-        generateStrips(workArr, 0, 1, 2, width, height, length); // Direction: EAST (positive X)
-        // Combine strips into layers and layers into volumes
-        combineStripsToLayers(workArr, 0, 1, 2, width, height, length); // Directions: EAST, SOUTH (positive Z), UP (positive Y)
-    }
-
-    private void generateStrips(int[][][] workArr, int stripDir, int combineDir, int layerDir, int width, int height, int length) {
-        // For each layer in the strip direction
-        for (int y = 0; y < height; y++) {
-            for (int z = 0; z < length; z++) {
-                for (int x = 0; x < width; x++) {
-                    int index = (y * length + z) * width + x;
-                    if (index >= currentSchematic.blocks.length) continue;
-
-                    int paletteIndex = getPaletteIndex(currentSchematic.blocks, index);
-                    String blockState = currentSchematic.palette.get(paletteIndex);
-
-                    if (blockState == null) continue;
-
-                    // Skip air blocks if ignoreAir is enabled
-                    if (ignoreAir.get() && (blockState.equals("minecraft:air") || blockState.equals("minecraft:cave_air"))) {
-                        continue;
-                    }
-
-                    // Skip waterlogged blocks if disabled
-                    if (!placeWaterlogged.get() && blockState.contains("waterlogged=true")) {
-                        continue;
-                    }
-
-                    // Find the length of consecutive identical blocks in the strip direction
-                    int stripLength = 1;
-                    for (int i = 1; i < width - x; i++) {
-                        int nextIndex = (y * length + z) * width + (x + i);
-                        if (nextIndex >= currentSchematic.blocks.length) break;
-
-                        int nextPaletteIndex = getPaletteIndex(currentSchematic.blocks, nextIndex);
-                        String nextBlockState = currentSchematic.palette.get(nextPaletteIndex);
-
-                        if (!blockState.equals(nextBlockState)) break;
-                        stripLength++;
-                    }
-
-                    workArr[x][y][z] = stripLength;
-                    x += stripLength - 1; // Skip processed blocks
-                }
-            }
-        }
-    }
-
-    private void combineStripsToLayers(int[][][] workArr, int stripDir, int combineDir, int layerDir, int width, int height, int length) {
-        // Combine strips into layers (2D)
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                for (int z = 0; z < length; z++) {
-                    int stripLength = workArr[x][y][z];
-                    if (stripLength == 0) continue;
-
-                    int index = (y * length + z) * width + x;
-                    int paletteIndex = getPaletteIndex(currentSchematic.blocks, index);
-                    String blockState = currentSchematic.palette.get(paletteIndex);
-
-                    // Find consecutive strips in the combine direction
-                    int layerCount = 1;
-                    for (int i = 1; i < length - z; i++) {
-                        int nextIndex = (y * length + (z + i)) * width + x;
-                        if (nextIndex >= currentSchematic.blocks.length) break;
-
-                        int nextPaletteIndex = getPaletteIndex(currentSchematic.blocks, nextIndex);
-                        String nextBlockState = currentSchematic.palette.get(nextPaletteIndex);
-
-                        if (!blockState.equals(nextBlockState) || workArr[x][y][z + i] != stripLength) break;
-                        layerCount++;
-                    }
-
-                    // Clear processed strips
-                    for (int i = 0; i < layerCount; i++) {
-                        workArr[x][y][z + i] = 0;
-                    }
-
-                    // Encode the layer information
-                    int packedSize = (stripLength & 0xF) | ((layerCount & 0xF) << 4);
-                    workArr[x][y][z] = packedSize;
-                    z += layerCount - 1; // Skip processed strips
-                }
-            }
-        }
-
-        // Combine layers into volumes (3D)
-        for (int x = 0; x < width; x++) {
-            for (int z = 0; z < length; z++) {
-                for (int y = 0; y < height; y++) {
-                    int packedSize = workArr[x][y][z];
-                    if (packedSize == 0) continue;
-
-                    int index = (y * length + z) * width + x;
-                    int paletteIndex = getPaletteIndex(currentSchematic.blocks, index);
-                    String blockState = currentSchematic.palette.get(paletteIndex);
-
-                    // Find consecutive layers in the layer direction
-                    int volumeCount = 1;
-                    for (int i = 1; i < height - y; i++) {
-                        int nextIndex = ((y + i) * length + z) * width + x;
-                        if (nextIndex >= currentSchematic.blocks.length) break;
-
-                        int nextPaletteIndex = getPaletteIndex(currentSchematic.blocks, nextIndex);
-                        String nextBlockState = currentSchematic.palette.get(nextPaletteIndex);
-
-                        if (!blockState.equals(nextBlockState) || workArr[x][y + i][z] != packedSize) break;
-                        volumeCount++;
-                    }
-
-                    // Clear processed layers
-                    for (int i = 0; i < volumeCount; i++) {
-                        workArr[x][y + i][z] = 0;
-                    }
-
-                    // Create volume encoding: [coordBits(24)][height(8)][depth(8)][width(8)]
-                    int stripLength = packedSize & 0xF;
-                    int layerCount = (packedSize >> 4) & 0xF;
-                    // Pack coordinates into 24 bits (x:8, y:8, z:8) - sufficient for most schematics
-                    long coordBits = ((long) (x & 0xFF) << 16) | ((long) (y & 0xFF) << 8) | (long) (z & 0xFF);
-                    long encodedVolume = (coordBits << 24) | ((long) (volumeCount - 1) << 16) | ((long) (layerCount - 1) << 8) | (long) (stripLength - 1);
-                    fillVolumes.add(encodedVolume);
-                    y += volumeCount - 1; // Skip processed layers
-                }
-            }
-        }
-    }
-
-    private void generateCommandsFromVolumes(BlockPos basePos) {
-        for (long encodedVolume : fillVolumes) {
-            // Decode volume: [coordBits(48)][height(8)][depth(8)][width(8)]
-            long coordBits = encodedVolume >>> 24;
-            int x = unpackX(coordBits);
-            int y = unpackY(coordBits);
-            int z = unpackZ(coordBits);
-
-            int volumeWidth = (int) ((encodedVolume >> 8) & 0xFF) + 1;
-            int volumeDepth = (int) ((encodedVolume >> 16) & 0xFF) + 1;
-            int volumeHeight = (int) ((encodedVolume >> 24) & 0xFF) + 1;
-
-            // Get block state from the schematic
-            int index = (y * currentSchematic.length + z) * currentSchematic.width + x;
-            if (index >= currentSchematic.blocks.length) continue;
-
-            int paletteIndex = getPaletteIndex(currentSchematic.blocks, index);
-            String blockState = currentSchematic.palette.get(paletteIndex);
-            if (blockState == null) continue;
-
-            // Debug: Log the first few blocks
-            if (placementCommands.size() < 3) {
-                info("Block at (" + x + "," + y + "," + z + "): paletteIndex=" + paletteIndex + ", blockState='" + blockState + "'");
-            }
-
-            // Calculate world positions
-            BlockPos startPos = basePos.add(x, y, z);
-            BlockPos endPos = startPos.add(volumeWidth - 1, volumeHeight - 1, volumeDepth - 1);
-
-            // Generate fill command
-            String fillCommand = String.format("fill %d %d %d %d %d %d %s",
-                    startPos.getX(), startPos.getY(), startPos.getZ(),
-                    endPos.getX(), endPos.getY(), endPos.getZ(),
-                    blockState);
-
-            placementCommands.add(fillCommand);
-        }
-    }
-
-    private long packCoordinate(int x, int y, int z) {
-        return ((long) x & 0xFFFF) | (((long) y & 0xFFFF) << 16) | (((long) z & 0xFFFF) << 32);
-    }
-
-    private int unpackX(long coord) {
-        return (int) (coord & 0xFF);
-    }
-
-    private int unpackY(long coord) {
-        return (int) ((coord >> 8) & 0xFF);
-    }
-
-    private int unpackZ(long coord) {
-        return (int) ((coord >> 16) & 0xFF);
-    }
-
     private int getPaletteIndex(int[] blocks, int index) {
         // Our new format stores palette indices directly in int array
         return blocks[index];
     }
 
     private BlockPos getPlacementPosition() {
+        if (mc.player == null) return BlockPos.ORIGIN;
+
         BlockPos basePos;
         switch (placementMode.get()) {
-            case Relative -> {
-                if (mc.player == null) return BlockPos.ORIGIN;
-                basePos = mc.player.getBlockPos();
-            }
-            case Absolute -> {
-                basePos = BlockPos.ORIGIN;
-            }
+            case Relative -> basePos = mc.player.getBlockPos(); // player feet
+            case Absolute -> basePos = BlockPos.ORIGIN;
             default -> basePos = BlockPos.ORIGIN;
         }
 
-        return basePos.add(placementOffset.get());
+        // Apply placement offset (X, Y, Z)
+        basePos = basePos.add(placementOffset.get());
+
+        // Only subtract origin X/Z to align horizontally
+        if (currentSchematic != null && currentSchematic.origin != null) {
+            basePos = basePos.subtract(new BlockPos(currentSchematic.origin.getX(), 0, currentSchematic.origin.getZ()));
+        }
+
+        return basePos;
     }
 
     private void startPlacement() {
         isPlacing = true;
-        commandIndex = 0;
+        expectedTicks = (placementCommands.size() + packetsPerTick.get() - 1) / packetsPerTick.get();
+        info("Expected ticks: " + expectedTicks + " for " + placementCommands.size() + " commands");
     }
 
     private String getBlockStateString(BlockState state) {
@@ -555,18 +549,19 @@ public class SchematicPlacer extends Module {
             return blockName;
         }
 
-        // Build the properties string
+        // Build the properties string in sorted order for consistency
         StringBuilder properties = new StringBuilder();
         properties.append('[');
 
-        boolean first = true;
-        for (Map.Entry<?, ?> entry : state.getEntries().entrySet()) {
-            if (!first) {
-                properties.append(',');
-            }
-            properties.append(entry.getKey()).append('=').append(entry.getValue());
-            first = false;
-        }
+        // Sort properties by key name for consistent command format
+        state.getEntries().entrySet().stream()
+            .sorted((a, b) -> a.getKey().getName().compareTo(b.getKey().getName()))
+            .forEach(entry -> {
+                if (properties.length() > 1) {
+                    properties.append(',');
+                }
+                properties.append(entry.getKey().getName()).append('=').append(entry.getValue());
+            });
 
         properties.append(']');
         return blockName + properties.toString();

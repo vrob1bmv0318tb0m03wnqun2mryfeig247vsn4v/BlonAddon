@@ -1,10 +1,10 @@
 # Blon Addon
 
-Blon is a powerful Meteor Client addon that provides advanced utility modules, commands, and themes for enhanced Minecraft gameplay. This addon focuses on leveraging command block "cores" for various exploits and utilities.
+Blon is a weak Meteor Client addon that provides utility modules, commands, and themes for enhanced Minecraft gameplay. This addon focuses on leveraging command block "cores" for numerous utilities.
 
 ## Features
 
-- **11 Utility Modules**: From particle auras to schematic placers
+- **13 Utility Modules**: From particle auras to schematic placers
 - **8 Custom Commands**: For core management and automation
 - **10 GUI Themes**: Including misc client themes
 - **Core System**: Advanced command block manipulation for utilities
@@ -59,7 +59,7 @@ Default: 16x16x32 with red_stained_glass
 **Description**: Displays chat messages as floating text bubbles above players' heads.
 
 ### ForceGrab
-**Description**: Grabs entities and moves them around using the Core. Middle Click or '[' to grab entities and control their position.
+**Description**: Grabs entities and moves them around using the Core. Middle Click or '[' to grab entities and control their position *throw is broken rn*.
 
 **Key Settings**:
 - **Distance**: How far to hold the entity
@@ -77,7 +77,7 @@ Default: 16x16x32 with red_stained_glass
 - **Position Mode**: OPERATOR or CREATIVE positioning
 
 ### LegitKillAura
-**Description**: A kill aura that appears legitimate to anti-cheat systems.
+**Description**: A kill aura that appears legitimate to anti-cheat systems *semi broken*.
 
 ### NoParticleSpamModule
 **Description**: Blocks command block output messages in chat to reduce spam from core operations.
@@ -139,10 +139,33 @@ Default: 16x16x32 with red_stained_glass
 - **Attack Count**: Number of attacks per interaction
 - **Auto Swap Back**: Return to previous item
 
+### Pistol
+**Description**: Shoots and kills players or breaks blocks using the core system.
+
+**Key Settings**:
+- **Range**: Maximum distance the pistol can shoot
+- **Particle**: Particle to spawn on shot
+- **Max Packets Per Tick**: Maximum number of C2S packets sent per tick
+- **Gun Model**: Render the custom pistol model
+- **Gun X/Y/Z**: Offsets for the gun model
+- **Kill Sound/Break Sound**: Sounds played when killing/breaking
+- **Sound Pitch**: Pitch of the pistol sounds
+
+### PortalGun
+**Description**: Creates portals using particles and the Command Block Core. Left click places blue portal, right click places orange portal. Walk into one to teleport to the other.
+
+**Key Settings**:
+- **Range**: Maximum distance to place portals
+- **Height/Width**: Dimensions of the portal
+- **Density**: Particle density multiplier
+- **Teleport Trigger/Offset**: Distance to trigger teleport and offset destination
+- **Gun Model**: Render the custom portal gun model
+- **Gun X/Y/Z**: Offsets for the gun model
+
 ## Commands
 
 ### .ad
-**Description**: Executes ad tellraw command in the first core impulse block (always active). Used for advertising or messaging.
+**Description**: Executes ad tellraw command in the first core impulse block (always active). Used for advertising our discord.
 
 ### .core
 **Description**: Spawns a core with custom dimensions. Usage: `.core [w] [l] [h] [block]`
@@ -181,7 +204,7 @@ Blon includes several GUI themes that mimic popular Minecraft clients:
 - **Blon**
 - **BlonGuiTheme**
 - **Boze**
-- **Fih**
+- **Fih (w fih client)**
 - **Forest**
 - **GlossyPurple**
 - **Mercury**
@@ -190,7 +213,8 @@ Blon includes several GUI themes that mimic popular Minecraft clients:
 
 ## Contributing
 
-I encourage you to work on this project and submit pull requests :D.
+I encourage you to work on this project and submit pull requests :D
+
 This addon is developed by blon (@every_ne). For suggestions or bug reports:
 
 ## Join the Discord for suggestions:

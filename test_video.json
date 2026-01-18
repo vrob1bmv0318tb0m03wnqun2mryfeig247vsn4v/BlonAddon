@@ -1,0 +1,35 @@
+{
+  "video_info": {
+    "fps": 2,
+    "tiles_x": 1,
+    "total_frames": 2
+  },
+  "frames": [
+    {
+      "frame": 0,
+      "tiles": [
+        {
+          "text": "",
+          "extra": [
+            {"text": "█", "color": "#ff0000"},
+            {"text": "\n"},
+            {"text": "█", "color": "#00ff00"}
+          ]
+        }
+      ]
+    },
+    {
+      "frame": 1,
+      "tiles": [
+        {
+          "text": "",
+          "extra": [
+            {"text": "█", "color": "#0000ff"},
+            {"text": "\n"},
+            {"text": "█", "color": "#ffff00"}
+          ]
+        }
+      ]
+    }
+  ]
+}
