@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "fih-addon",
+  "version": "${version}",
+  "name": "Fih Meteor Addon",
+  "description": "",
+  "authors": [
+    "Hex_Cod"
+  ],
+  "contact": {
+  },
+  "icon": "assets/template/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "meteor": [
+      "cod.hex.fih.Fih"
+    ]
+  },
+  "mixins": [
+    "fih.mixins.json"
+  ],
+  "custom": {
+    "meteor-client:color": "0,127,255",
+    "modmenu": {
+      "parent": {
+        "id": "meteor-client"
+      }
+    }
+  },
+  "depends": {
+    "java": ">=21",
+    "minecraft": ["${mc_version}"],
+    "meteor-client": "*"
+  }
+}

@@ -21,6 +21,9 @@
   "custom": {
     "meteor-client:color": "255,0,67"
   },
+  "mixins": [
+    "blon.mixins.json"
+  ],
   "depends": {
     "java": ">=21",
     "minecraft": ">=${mc_version}",

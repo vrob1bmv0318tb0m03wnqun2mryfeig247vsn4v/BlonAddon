@@ -13,6 +13,7 @@ import org.lwjgl.glfw.GLFW;
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
 import meteordevelopment.meteorclient.settings.DoubleSetting;
+import meteordevelopment.meteorclient.settings.IntSetting;
 import meteordevelopment.meteorclient.settings.Setting;
 import meteordevelopment.meteorclient.settings.SettingGroup;
 import meteordevelopment.meteorclient.systems.modules.Module;
@@ -29,6 +30,8 @@ import skid.supreme.blon.core.CoreUpdater;
 
 public class PortalGunModule extends Module {
     private final SettingGroup sgGeneral = settings.getDefaultGroup();
+    private final SettingGroup sgHorizontal = settings.createGroup("Horizontal Portals");
+    private final SettingGroup sgVertical = settings.createGroup("Vertical Portals");
 
     private final Setting<Double> range = sgGeneral.add(new DoubleSetting.Builder()
             .name("range")
@@ -112,6 +115,86 @@ public class PortalGunModule extends Module {
             .max(5.0)
             .sliderMin(-2.0)
             .sliderMax(2.0)
+            .build());
+
+    private final Setting<Double> horizontalHeight = sgHorizontal.add(new DoubleSetting.Builder()
+            .name("height")
+            .description("Height of horizontal portals.")
+            .defaultValue(2.0)
+            .min(1.0)
+            .sliderMax(5.0)
+            .build());
+
+    private final Setting<Double> horizontalWidth = sgHorizontal.add(new DoubleSetting.Builder()
+            .name("width")
+            .description("Width of horizontal portals.")
+            .defaultValue(1.0)
+            .min(0.5)
+            .sliderMax(3.0)
+            .build());
+
+    private final Setting<Double> horizontalDensity = sgHorizontal.add(new DoubleSetting.Builder()
+            .name("density")
+            .description("Particle density multiplier for horizontal portals.")
+            .defaultValue(1.0)
+            .min(0.1)
+            .max(5.0)
+            .build());
+
+    private final Setting<Double> horizontalTeleportTrigger = sgHorizontal.add(new DoubleSetting.Builder()
+            .name("teleport-trigger")
+            .description("Distance from horizontal portal to trigger teleport.")
+            .defaultValue(1.0)
+            .min(0.1)
+            .max(5.0)
+            .build());
+
+    private final Setting<Double> horizontalTeleportOffset = sgHorizontal.add(new DoubleSetting.Builder()
+            .name("teleport-offset")
+            .description("Distance to offset teleportation destination from horizontal portal center.")
+            .defaultValue(0.5)
+            .min(0.1)
+            .max(5.0)
+            .build());
+
+    private final Setting<Double> verticalHeight = sgVertical.add(new DoubleSetting.Builder()
+            .name("height")
+            .description("Height of vertical portals.")
+            .defaultValue(2.0)
+            .min(1.0)
+            .sliderMax(5.0)
+            .build());
+
+    private final Setting<Double> verticalWidth = sgVertical.add(new DoubleSetting.Builder()
+            .name("width")
+            .description("Width of vertical portals.")
+            .defaultValue(1.0)
+            .min(0.5)
+            .sliderMax(3.0)
+            .build());
+
+    private final Setting<Double> verticalDensity = sgVertical.add(new DoubleSetting.Builder()
+            .name("density")
+            .description("Particle density multiplier for vertical portals.")
+            .defaultValue(1.0)
+            .min(0.1)
+            .max(5.0)
+            .build());
+
+    private final Setting<Double> verticalTeleportTrigger = sgVertical.add(new DoubleSetting.Builder()
+            .name("teleport-trigger")
+            .description("Distance from vertical portal to trigger teleport.")
+            .defaultValue(1.0)
+            .min(0.1)
+            .max(5.0)
+            .build());
+
+    private final Setting<Double> verticalTeleportOffset = sgVertical.add(new DoubleSetting.Builder()
+            .name("teleport-offset")
+            .description("Distance to offset teleportation destination from vertical portal center.")
+            .defaultValue(0.5)
+            .min(0.1)
+            .max(5.0)
             .build());
 
     private final List<GunPart> gunParts = new ArrayList<>();
@@ -198,7 +281,7 @@ public class PortalGunModule extends Module {
             e.printStackTrace();
         }
     }
-
+    // yes
     private double parseRelative(String s) {
         if (s.startsWith("~")) {
             if (s.length() == 1)
@@ -215,7 +298,7 @@ public class PortalGunModule extends Module {
 
     private void removeGun() {
         if (!gunParts.isEmpty()) {
-            ChatUtils.sendPlayerMsg("/kill @e[tag=blon_pg_part]"); 
+            ChatUtils.sendPlayerMsg("/kill @e[tag=blon_pg_part]");
 
             for (GunPart part : gunParts) {
                 ChatUtils.sendPlayerMsg("/kill @e[tag=" + part.tag + "]");
@@ -223,6 +306,12 @@ public class PortalGunModule extends Module {
             gunParts.clear();
         }
     }
+
+    private boolean isHorizontal(Portal p) {
+        return p.facing == Direction.UP || p.facing == Direction.DOWN;
+    }
+
+
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
@@ -276,19 +365,15 @@ public class PortalGunModule extends Module {
             }
         }
     }
-
+    // this took me so long to think of shut up its made perfectly
     private void renderPortals() {
         if (CoreCommand.corePositions.isEmpty())
             return;
-
         String playerName = mc.player.getName().getString();
-
         List<String> commands = new ArrayList<>();
         List<BlockPos> coresUsed = new ArrayList<>();
-
         List<Vec3d> particles = new ArrayList<>();
         List<String> types = new ArrayList<>();
-
         int max = CoreCommand.corePositions.size();
         if (max == 0)
             return;
@@ -297,7 +382,8 @@ public class PortalGunModule extends Module {
         int gunPartCount = gunParts.size();
         int summonCount = summoned ? 0 : summonCmds.size();
 
-        int totalCoresNeededForLogic = summonCount + ((activePortals == 2) ? 2 : 0) + gunPartCount;
+        int teleportCommandsNeeded = (activePortals == 2) ? 2 : 0;
+        int totalCoresNeededForLogic = summonCount + teleportCommandsNeeded + gunPartCount;
 
         int particleBlocksAvailable = max - totalCoresNeededForLogic;
         if (particleBlocksAvailable < 0) {
@@ -414,9 +500,10 @@ public class PortalGunModule extends Module {
                 normal.getOffsetY() * 0.1,
                 normal.getOffsetZ() * 0.1);
 
-        int pointCount = (int) (40 * density.get());
-        double w = width.get() / 2.0;
-        double h = height.get() / 2.0;
+        double d = isHorizontal(portal) ? horizontalDensity.get() : verticalDensity.get();
+        double w = (isHorizontal(portal) ? horizontalWidth.get() : verticalWidth.get()) / 2.0;
+        double h = (isHorizontal(portal) ? horizontalHeight.get() : verticalHeight.get()) / 2.0;
+        int pointCount = (int) (40 * d);
 
         for (int i = 0; i < pointCount; i++) {
             double t = 2 * Math.PI * i / pointCount;
@@ -433,8 +520,13 @@ public class PortalGunModule extends Module {
 
     private void addTeleportCommand(Portal from, Portal to, List<String> commands, String playerName) {
 
-        double triggerDist = teleportTrigger.get();
-        double offset = teleportOffset.get();
+        double triggerDist = isHorizontal(from)
+                ? horizontalTeleportTrigger.get()
+                : verticalTeleportTrigger.get();
+
+        double offset = isHorizontal(from)
+                ? horizontalTeleportOffset.get()
+                : verticalTeleportOffset.get();
 
         Vec3d normal = new Vec3d(to.facing.getOffsetX(), to.facing.getOffsetY(), to.facing.getOffsetZ());
 

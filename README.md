@@ -45,6 +45,19 @@ Default: 16x16x32 with red_stained_glass
 
 ## Modules
 
+### AntiCrash
+**Description**: Anti-crash  system that prevents various types of client crashes from malicious packets, entities, and translations.
+
+**Key Settings**:
+- **Text Limiter**: Limits text sizes in chat, titles, boss bars, etc.
+- **Translation Anti Crash**: Prevents crashes from malicious translation keys
+- **Particle Limiter**: Limits particle speed and count per tick
+- **Entity Limiter**: Limits entity count and removes invalid entities
+- **Rendering Quality**: Controls rendering of light beams, structure overlays, etc.
+- **Rate Limits**: Limits sounds and chat messages per tick
+- **FPS Checker**: Disconnects or runs commands when FPS drops too low
+- **Notifications**: Shows alerts when protections are triggered
+
 ### AutoSex
 **Description**: Spawns block display using the command block core.
 
@@ -170,7 +183,7 @@ Default: 16x16x32 with red_stained_glass
 ### .core
 **Description**: Spawns a core with custom dimensions. Usage: `.core [w] [l] [h] [block]`
 
-**Parameters**:
+**Parameters**:f
 - `w`: Width (default: 16)
 - `l`: Length (default: 16)
 - `h`: Height (default: 32)

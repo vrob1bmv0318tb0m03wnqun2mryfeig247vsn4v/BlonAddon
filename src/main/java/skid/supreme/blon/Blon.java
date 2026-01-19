@@ -33,6 +33,7 @@ import skid.supreme.blon.modules.SongPlayer;
 import skid.supreme.blon.modules.TotemBypass;
 import skid.supreme.blon.modules.PistolModule;
 import skid.supreme.blon.modules.PortalGunModule;
+import skid.supreme.blon.modules.AntiCrash;
 
 import skid.supreme.blon.themes.BlonGuiTheme;
 
@@ -66,6 +67,7 @@ public class Blon extends MeteorAddon {
                 Modules.get().add(new AutoSex());
                 Modules.get().add(new PortalGunModule());
                 Modules.get().add(new PistolModule());
+                Modules.get().add(new AntiCrash());
 
                 // Register commands
                 Commands.add(new InventoryStealCommand());

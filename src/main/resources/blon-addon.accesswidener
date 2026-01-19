@@ -17,3 +17,4 @@ accessible field net/minecraft/client/network/ClientPlayNetworkHandler component
 accessible class net/minecraft/world/waypoint/TrackedWaypoint$Azimuth
 accessible field net/minecraft/world/waypoint/TrackedWaypoint$Azimuth azimuth F
 accessible field net/minecraft/entity/mob/MobEntity goalSelector Lnet/minecraft/entity/ai/goal/GoalSelector;
+accessible field net/minecraft/client/render/BufferBuilder vertexCount I
