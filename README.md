@@ -1,6 +1,6 @@
 # Blon Addon
 
-Blon is a weak Meteor Client addon that provides utility modules, commands, and themes for enhanced Minecraft gameplay. This addon focuses on leveraging command block "cores" for numerous utilities.
+Blon is a weak Meteor Client addon that provides utility modules, commands, and themes for enhanced Minecraft gameplay. This addon focuses on leveraging command block cores for numerous utilities.
 
 ## Features
 
